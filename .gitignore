@@ -13,6 +13,7 @@ flexgeo2/
 
 # Analysis outputs
 results/
+pdb2lj5.pdb
 
 # OS/editor files
 .DS_Store
