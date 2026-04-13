@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "FleXgeo2"
+version = "0.1.0"
+description = "FleXgeo2 prototype for protein backbone differential geometry analysis using Melodia."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "hdbscan>=0.8",
+    "melodia-py",
+    "matplotlib>=3.8",
+    "pandas>=2.2",
+]
+
+[project.scripts]
+flexgeo2 = "backbone_cli.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["backbone_cli*"]

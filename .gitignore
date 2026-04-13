@@ -1,0 +1,18 @@
+# Python cache and build artifacts
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+flexgeo2/
+
+# Analysis outputs
+results/
+
+# OS/editor files
+.DS_Store
