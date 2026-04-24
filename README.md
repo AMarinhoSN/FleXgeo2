@@ -1,8 +1,15 @@
+
+![logo](./flexgeo_logo_wide.png)
+
+---
+
 # FleXgeo2
 
 This is the first `FleXgeo2` prototype, continuing your earlier software with a new CLI built around [Melodia_py](https://github.com/rwmontalvao/Melodia_py) to compute differential geometry descriptors from PDB files and generate ensemble-aware curvature and torsion outputs.
 
 `FleXgeo2` can now be used both as a CLI and as a Python library. The high-level library entrypoint is `FlexGeo2App`, and advanced users can also import service classes such as `GeometryService`, `DistanceService`, and `ClusteringService`.
+
+---
 
 ## What it does
 
@@ -20,6 +27,8 @@ This is the first `FleXgeo2` prototype, continuing your earlier software with a 
 - can cluster conformations using a whole residue range as one combined geometric signature
 - writes separate outputs for each chain
 
+ ---
+
 ## Install
 
 ```bash
@@ -28,6 +37,7 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+---
 ## Usage
 
 ```bash
@@ -189,6 +199,8 @@ Verbose mode adds:
 - `chains/<chain>/residue_range_cluster_summary.csv`
 - `chains/<chain>/range_cluster_plots/<start-end>_clusters.png`
 
+---
+
 ## Notes
 
 - The prototype expects Melodia to return columns including `model`, `chain`, `order`, `name`, `curvature`, and `torsion`.
@@ -199,3 +211,10 @@ Verbose mode adds:
 - Distance matrices use rows for ensemble models and columns for residues, with each cell storing the Euclidean distance to the chosen reference in `(curvature, torsion)` space.
 - Residue clustering treats each residue independently and clusters the ensemble conformations using only that residue's curvature and torsion values.
 - Residue-range clustering concatenates curvature and torsion values across the selected window into one feature vector per conformation, then runs one HDBSCAN solution for that whole region.
+
+---
+
+## How to cite?
+
+> da Silva Neto AM, Silva SR, Vendruscolo M, Camilloni C, Montalvão RW. A superposition free method for protein conformational ensemble analyses and local clustering based on a differential geometry representation of backbone. Proteins. 2019; 87: 302–312. https://doi.org/10.1002/prot.25652
+
