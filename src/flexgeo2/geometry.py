@@ -129,8 +129,7 @@ class GeometryService:
         ):
             first_bin += 1
         while (
-            last_bin > first_bin
-            and (float(counts[last_bin]) / total_count) < dmax_outlier_fraction
+            last_bin > first_bin and (float(counts[last_bin]) / total_count) < dmax_outlier_fraction
         ):
             last_bin -= 1
 
@@ -191,8 +190,7 @@ class GeometryService:
                     "curvature_dmax_bin_width": curvature_bin_width,
                     "torsion_dmax_bin_width": torsion_bin_width,
                     "dmax": math.sqrt(
-                        (curvature_min - curvature_max) ** 2
-                        + (torsion_min - torsion_max) ** 2
+                        (curvature_min - curvature_max) ** 2 + (torsion_min - torsion_max) ** 2
                     ),
                 }
             )
