@@ -16,7 +16,8 @@ dependencies = [
 ]
 
 [project.scripts]
-flexgeo2 = "backbone_cli.cli:main"
+flexgeo2 = "flexgeo2.cli.main:main"
 
 [tool.setuptools.packages.find]
-include = ["backbone_cli*"]
+where = ["src"]
+include = ["flexgeo2*"]
