@@ -12,7 +12,7 @@
 
 `FleXgeo2` is a complete refactor of [FleXgeo](https://github.com/AMarinhoSN/FleXgeo), this new version is built around [Melodia_py](https://github.com/rwmontalvao/Melodia_py) to compute differential geometry descriptors from PDB files and generate ensemble-aware curvature and torsion outputs.
 
-`FleXgeo2` can now be used both as a CLI and as a Python library. The high-level library entrypoint is `FlexGeo2App`, and advanced users can also import service classes such as `GeometryService`, `DistanceService`, and `ClusteringService`.
+`FleXgeo2` can now be used both as a CLI and as a Python library. The high-level library entrypoint is `FlexGeo2App`, and advanced users can also import service classes such as `GeometryService`, `DistanceService`, and `ClusteringService`. Check the [full doccumentation](https://github.com/AMarinhoSN/FleXgeo2/wiki) for more details
 
 ---
 
