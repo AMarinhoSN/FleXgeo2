@@ -12,6 +12,7 @@ This is the first `FleXgeo2` prototype, continuing your earlier software with a 
 - plots curvature and torsion by residue
 - for multi-model PDBs, plots the ensemble mean with a shaded standard deviation band
 - overlays individual model traces to help compare conformers
+- computes per-residue `dmax`, an outlier-trimmed maximum spread in `(curvature, torsion)` space
 - computes per-residue Euclidean distances in `(curvature, torsion)` space to a reference state
 - exports residue-distance matrices and heatmaps
 - can cluster conformations residue-by-residue with HDBSCAN in `(curvature, torsion)` space
@@ -103,6 +104,12 @@ To hide individual model overlays:
 flexgeo2 path/to/ensemble.pdb --hide-model-traces
 ```
 
+To tune `dmax` outlier trimming, set the fraction cutoff for sparse extreme histogram bins:
+
+```bash
+flexgeo2 path/to/ensemble.pdb --dmax-outlier-fraction 0.02
+```
+
 To compare the ensemble against a reference model already present in the input:
 
 ```bash
@@ -186,6 +193,8 @@ Verbose mode adds:
 
 - The prototype expects Melodia to return columns including `model`, `chain`, `order`, `name`, `curvature`, and `torsion`.
 - Residue positions are plotted using Melodia's `order` column.
+- `residue_summary.csv` includes `dmax` plus the trimmed extrema used to compute it: `curvature_dmax_min`, `curvature_dmax_max`, `torsion_dmax_min`, and `torsion_dmax_max`.
+- `dmax` trims only sparse extreme histogram bins. The default threshold is `0.01`, meaning only extreme bins with less than 1% of a residue's observations are ignored.
 - The per-chain model summary includes mean absolute deviation from the ensemble mean, which is useful as a first-pass conformational variability signal.
 - Distance matrices use rows for ensemble models and columns for residues, with each cell storing the Euclidean distance to the chosen reference in `(curvature, torsion)` space.
 - Residue clustering treats each residue independently and clusters the ensemble conformations using only that residue's curvature and torsion values.
