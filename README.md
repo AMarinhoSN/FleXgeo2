@@ -2,6 +2,8 @@
 
 This is the first `FleXgeo2` prototype, continuing your earlier software with a new CLI built around [Melodia_py](https://github.com/rwmontalvao/Melodia_py) to compute differential geometry descriptors from PDB files and generate ensemble-aware curvature and torsion outputs.
 
+`FleXgeo2` can now be used both as a CLI and as a Python library. The high-level library entrypoint is `FlexGeo2App`, and advanced users can also import service classes such as `GeometryService`, `DistanceService`, and `ClusteringService`.
+
 ## What it does
 
 - reads a PDB file
@@ -29,6 +31,53 @@ pip install -e .
 
 ```bash
 flexgeo2 path/to/structure.pdb
+```
+
+Library usage:
+
+```python
+from flexgeo2 import AnalysisConfig, FlexGeo2App
+
+config = AnalysisConfig(pdb_file="ensemble.pdb")
+result = FlexGeo2App().run(config)
+```
+
+Service-level usage:
+
+```python
+from flexgeo2.geometry import GeometryService
+from flexgeo2.clustering import ClusteringService
+
+geometry = GeometryService()
+raw_df = geometry.load_structure("ensemble.pdb", n_jobs=4)
+raw_df = geometry.filter_chains(raw_df, ["A"])
+raw_df = geometry.normalize(raw_df)
+summary_df = geometry.summarize(raw_df)
+
+clusters = ClusteringService()
+assignments_df, cluster_summary_df = clusters.cluster_residues(
+    raw_df,
+    min_cluster_size=5,
+    min_samples=None,
+)
+```
+
+Lower-level writer/plotter usage:
+
+```python
+from flexgeo2.config import OutputConfig
+from flexgeo2.outputs import OutputWriter
+from flexgeo2.plotting import DistanceHeatmapPlotter
+
+plotter = DistanceHeatmapPlotter()
+plotter.plot(distance_long_df, "distance_heatmap.png", title="Reference comparison")
+
+writer = OutputWriter(OutputConfig(output_dir="results", verbose=False))
+artifacts = writer.write(
+    result,
+    max_models_in_plot=12,
+    hide_model_traces=False,
+)
 ```
 
 By default, `FleXgeo2` writes a lean set of top-level summary files and plots. Use `--output-verbose` when you want detailed intermediate tables, matrix exports, and duplicated per-chain output folders.
