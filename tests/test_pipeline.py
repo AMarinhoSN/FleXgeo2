@@ -29,8 +29,12 @@ class FakeGeometryService:
         self.calls.append("normalize")
         return df.copy()
 
-    def summarize(self, df: pd.DataFrame) -> pd.DataFrame:
-        self.calls.append("summarize")
+    def summarize(
+        self,
+        df: pd.DataFrame,
+        dmax_outlier_fraction: float = 0.01,
+    ) -> pd.DataFrame:
+        self.calls.append(f"summarize:{dmax_outlier_fraction}")
         return pd.DataFrame(
             [
                 {
@@ -47,6 +51,13 @@ class FakeGeometryService:
                     "torsion_min": df["torsion"].min(),
                     "torsion_max": df["torsion"].max(),
                     "models": df["model"].nunique(),
+                    "curvature_dmax_min": df["curvature"].min(),
+                    "curvature_dmax_max": df["curvature"].max(),
+                    "torsion_dmax_min": df["torsion"].min(),
+                    "torsion_dmax_max": df["torsion"].max(),
+                    "curvature_dmax_bin_width": 0.0,
+                    "torsion_dmax_bin_width": 0.0,
+                    "dmax": 0.0,
                 }
             ]
         )
@@ -153,6 +164,7 @@ def test_app_run_with_reference_model_wires_distance_result(
         n_jobs=2,
         max_models_in_plot=4,
         hide_model_traces=True,
+        dmax_outlier_fraction=0.05,
         reference=ReferenceConfig(model_id="1"),
         output=OutputConfig(write_files=False),
     )
@@ -167,7 +179,7 @@ def test_app_run_with_reference_model_wires_distance_result(
         "load_structure:ensemble.pdb:2",
         "filter_chains:['A']",
         "normalize",
-        "summarize",
+        "summarize:0.05",
         "build_model_summary",
     ]
     assert distances.calls == ["select_reference_rows:1", "compute:input model 1"]

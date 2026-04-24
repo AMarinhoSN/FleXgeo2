@@ -53,6 +53,13 @@ def test_summarize_groups_residues(normalized_geometry_df: pd.DataFrame) -> None
                 "torsion_min": 0.2,
                 "torsion_max": 0.3,
                 "models": 2,
+                "curvature_dmax_min": 0.1,
+                "curvature_dmax_max": 0.2,
+                "torsion_dmax_min": 0.2,
+                "torsion_dmax_max": 0.3,
+                "curvature_dmax_bin_width": 0.05,
+                "torsion_dmax_bin_width": 0.05,
+                "dmax": 0.1414213562,
             },
             {
                 "chain": "A",
@@ -68,6 +75,13 @@ def test_summarize_groups_residues(normalized_geometry_df: pd.DataFrame) -> None
                 "torsion_min": 0.5,
                 "torsion_max": 0.9,
                 "models": 2,
+                "curvature_dmax_min": 0.4,
+                "curvature_dmax_max": 0.6,
+                "torsion_dmax_min": 0.5,
+                "torsion_dmax_max": 0.9,
+                "curvature_dmax_bin_width": 0.1,
+                "torsion_dmax_bin_width": 0.2,
+                "dmax": 0.4472135955,
             },
             {
                 "chain": "B",
@@ -83,10 +97,108 @@ def test_summarize_groups_residues(normalized_geometry_df: pd.DataFrame) -> None
                 "torsion_min": 2.0,
                 "torsion_max": 2.5,
                 "models": 2,
+                "curvature_dmax_min": 1.5,
+                "curvature_dmax_max": 2.0,
+                "torsion_dmax_min": 2.0,
+                "torsion_dmax_max": 2.5,
+                "curvature_dmax_bin_width": 0.25,
+                "torsion_dmax_bin_width": 0.25,
+                "dmax": 0.7071067812,
             },
         ]
     )
     assert_frame_equal(result, expected, check_exact=False, rtol=1e-9, atol=1e-12)
+
+
+def test_summarize_dmax_defaults_to_raw_range_when_no_extreme_bins_are_sparse(
+    normalized_geometry_df: pd.DataFrame,
+) -> None:
+    result = GeometryService().summarize(normalized_geometry_df)
+
+    assert result["dmax"].tolist() == pytest.approx(
+        [
+            ((0.2 - 0.1) ** 2 + (0.3 - 0.2) ** 2) ** 0.5,
+            ((0.6 - 0.4) ** 2 + (0.9 - 0.5) ** 2) ** 0.5,
+            ((2.0 - 1.5) ** 2 + (2.5 - 2.0) ** 2) ** 0.5,
+        ]
+    )
+
+
+def test_summarize_dmax_trims_sparse_extreme_bins() -> None:
+    df = pd.DataFrame(
+        {
+            "model": [str(index) for index in range(12)],
+            "chain": ["A"] * 12,
+            "order": [1] * 12,
+            "name": ["ALA"] * 12,
+            "residue_label": ["ALA1"] * 12,
+            "curvature": [-100, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100],
+            "torsion": [-50, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 50],
+        }
+    )
+
+    result = GeometryService().summarize(df, dmax_outlier_fraction=0.1)
+    row = result.iloc[0]
+
+    assert row["curvature_dmax_min"] == 0.0
+    assert row["curvature_dmax_max"] == 9.0
+    assert row["torsion_dmax_min"] == 10.0
+    assert row["torsion_dmax_max"] == 19.0
+    assert row["dmax"] == pytest.approx(((9.0 - 0.0) ** 2 + (19.0 - 10.0) ** 2) ** 0.5)
+
+
+def test_summarize_dmax_zero_threshold_disables_trimming() -> None:
+    df = pd.DataFrame(
+        {
+            "model": [str(index) for index in range(12)],
+            "chain": ["A"] * 12,
+            "order": [1] * 12,
+            "name": ["ALA"] * 12,
+            "residue_label": ["ALA1"] * 12,
+            "curvature": [-100, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100],
+            "torsion": [-50, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 50],
+        }
+    )
+
+    result = GeometryService().summarize(df, dmax_outlier_fraction=0.0)
+    row = result.iloc[0]
+
+    assert row["curvature_dmax_min"] == -100.0
+    assert row["curvature_dmax_max"] == 100.0
+    assert row["torsion_dmax_min"] == -50.0
+    assert row["torsion_dmax_max"] == 50.0
+    assert row["dmax"] == pytest.approx(((100.0 + 100.0) ** 2 + (50.0 + 50.0) ** 2) ** 0.5)
+
+
+def test_summarize_dmax_constant_residue_is_zero() -> None:
+    df = pd.DataFrame(
+        [
+            {
+                "model": "1",
+                "chain": "A",
+                "order": 1,
+                "name": "ALA",
+                "residue_label": "ALA1",
+                "curvature": 1.5,
+                "torsion": 2.5,
+            },
+            {
+                "model": "2",
+                "chain": "A",
+                "order": 1,
+                "name": "ALA",
+                "residue_label": "ALA1",
+                "curvature": 1.5,
+                "torsion": 2.5,
+            },
+        ]
+    )
+
+    result = GeometryService().summarize(df)
+
+    assert result.loc[0, "curvature_dmax_bin_width"] == 0.0
+    assert result.loc[0, "torsion_dmax_bin_width"] == 0.0
+    assert result.loc[0, "dmax"] == 0.0
 
 
 def test_build_model_summary_computes_chain_and_overall_values(
@@ -205,3 +317,4 @@ def test_summarize_single_model_std_is_zero() -> None:
         result[["curvature_std", "torsion_std"]],
         pd.DataFrame({"curvature_std": [0.0], "torsion_std": [0.0]}),
     )
+    assert result.loc[0, "dmax"] == 0.0
