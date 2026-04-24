@@ -1,1 +1,0 @@
-"""Protein backbone CLI prototype."""
