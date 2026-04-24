@@ -17,9 +17,18 @@ dependencies = [
     "pandas>=2.2",
 ]
 
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+]
+
 [project.scripts]
 flexgeo2 = "flexgeo2.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["flexgeo2*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
