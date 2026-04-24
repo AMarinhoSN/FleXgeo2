@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 import argparse
+import math
 from pathlib import Path
 
 from flexgeo2.config import AnalysisConfig, ClusteringConfig, OutputConfig, ReferenceConfig
 from flexgeo2.pipeline import FlexGeo2App
+
+
+def fraction_in_unit_interval(value: str) -> float:
+    try:
+        fraction = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a number in [0, 1).") from exc
+    if not math.isfinite(fraction) or fraction < 0.0 or fraction >= 1.0:
+        raise argparse.ArgumentTypeError("must be a number in [0, 1).")
+    return fraction
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +54,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--hide-model-traces",
         action="store_true",
         help="Plot only the ensemble mean and standard deviation band.",
+    )
+    parser.add_argument(
+        "--dmax-outlier-fraction",
+        type=fraction_in_unit_interval,
+        default=0.01,
+        help=(
+            "Extreme histogram bins with less than this fraction of a residue's observations "
+            "are ignored when computing dmax. Default: 0.01"
+        ),
     )
     reference_group = parser.add_mutually_exclusive_group()
     reference_group.add_argument(
@@ -126,6 +146,7 @@ def build_config(args: argparse.Namespace) -> AnalysisConfig:
         n_jobs=args.n_jobs,
         max_models_in_plot=args.max_models_in_plot,
         hide_model_traces=args.hide_model_traces,
+        dmax_outlier_fraction=args.dmax_outlier_fraction,
         reference=reference,
         clustering=clustering,
         output=output,

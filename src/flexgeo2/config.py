@@ -43,6 +43,7 @@ class AnalysisConfig:
     n_jobs: int = 1
     max_models_in_plot: int = 12
     hide_model_traces: bool = False
+    dmax_outlier_fraction: float = 0.01
     reference: ReferenceConfig | None = None
     clustering: ClusteringConfig = field(default_factory=ClusteringConfig)
     output: OutputConfig = field(default_factory=OutputConfig)

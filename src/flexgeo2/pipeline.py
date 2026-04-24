@@ -45,7 +45,10 @@ class FlexGeo2App:
         raw_df = self.geometry.load_structure(pdb_file, n_jobs=config.n_jobs)
         raw_df = self.geometry.filter_chains(raw_df, config.chains)
         raw_df = self.geometry.normalize(raw_df)
-        residue_summary_df = self.geometry.summarize(raw_df)
+        residue_summary_df = self.geometry.summarize(
+            raw_df,
+            dmax_outlier_fraction=config.dmax_outlier_fraction,
+        )
         model_summary_df, overall_model_summary_df = self.geometry.build_model_summary(
             raw_df, residue_summary_df
         )
