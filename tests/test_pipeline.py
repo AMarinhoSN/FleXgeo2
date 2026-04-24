@@ -113,7 +113,7 @@ class FakeClusteringService:
 
 
 class FakeOutputWriter:
-    instances: list["FakeOutputWriter"] = []
+    instances: list[FakeOutputWriter] = []
 
     def __init__(self, config: OutputConfig) -> None:
         self.config = config

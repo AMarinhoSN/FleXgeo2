@@ -37,11 +37,9 @@ class OutputWriter:
 
     @staticmethod
     def write_distance_matrix_csv(distance_long_df, output_path: str | Path) -> None:
-        matrix_df = (
-            distance_long_df.pivot(
-                index="model", columns="residue_label", values="distance_to_reference"
-            ).sort_index()
-        )
+        matrix_df = distance_long_df.pivot(
+            index="model", columns="residue_label", values="distance_to_reference"
+        ).sort_index()
         matrix_df.to_csv(output_path)
 
     def write(self, result: AnalysisResult, max_models_in_plot: int, hide_model_traces: bool):
@@ -99,9 +97,7 @@ class OutputWriter:
                 else None
             ),
             cluster_plots_dir=(
-                output_dir / "cluster_plots"
-                if result.residue_clustering is not None
-                else None
+                output_dir / "cluster_plots" if result.residue_clustering is not None else None
             ),
             range_cluster_assignments_csv=(
                 output_dir / "residue_range_cluster_assignments.csv"
@@ -155,7 +151,10 @@ class OutputWriter:
                 result.residue_clustering.assignments_df.to_csv(
                     artifacts.cluster_assignments_csv, index=False
                 )
-            for (chain, residue_label), residue_cluster_df in result.residue_clustering.assignments_df.groupby(
+            for (
+                chain,
+                residue_label,
+            ), residue_cluster_df in result.residue_clustering.assignments_df.groupby(
                 ["chain", "residue_label"], dropna=False
             ):
                 chain_key = sanitize_chain_id(chain)
@@ -173,7 +172,10 @@ class OutputWriter:
                 result.residue_range_clustering.assignments_df.to_csv(
                     artifacts.range_cluster_assignments_csv, index=False
                 )
-            for (chain, range_label), range_cluster_df in result.residue_range_clustering.assignments_df.groupby(
+            for (
+                chain,
+                range_label,
+            ), range_cluster_df in result.residue_range_clustering.assignments_df.groupby(
                 ["chain", "range_label"], dropna=False
             ):
                 chain_key = sanitize_chain_id(chain)

@@ -143,7 +143,7 @@ class OverviewPlotter(BasePlotter):
         if len(chains) == 1:
             axes = [axes]
 
-        for row_axes, chain in zip(axes, chains):
+        for row_axes, chain in zip(axes, chains, strict=False):
             chain_df = summary_df[summary_df["chain"] == chain]
             x_values = chain_df["order"].to_numpy()
             residue_labels = chain_df["residue_label"].tolist()
@@ -197,12 +197,11 @@ class DistanceHeatmapPlotter:
         if len(chains) == 1:
             axes = [axes]
 
-        for axis, chain in zip(axes, chains):
+        for axis, chain in zip(axes, chains, strict=False):
             chain_df = distance_long_df[distance_long_df["chain"] == chain].copy()
-            matrix = (
-                chain_df.pivot(index="model", columns="residue_label", values="distance_to_reference")
-                .sort_index()
-            )
+            matrix = chain_df.pivot(
+                index="model", columns="residue_label", values="distance_to_reference"
+            ).sort_index()
             matrix = matrix.apply(pd.to_numeric, errors="coerce")
             if matrix.empty or matrix.isna().all().all():
                 raise ValueError(

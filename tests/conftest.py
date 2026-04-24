@@ -64,6 +64,6 @@ def raw_geometry_df() -> pd.DataFrame:
 def normalized_geometry_df(raw_geometry_df: pd.DataFrame) -> pd.DataFrame:
     df = raw_geometry_df.copy()
     df["residue_label"] = [
-        f"{name}{int(order)}" for order, name in zip(df["order"], df["name"])
+        f"{name}{int(order)}" for order, name in zip(df["order"], df["name"], strict=False)
     ]
     return df.sort_values(["chain", "model", "order"]).reset_index(drop=True)

@@ -21,9 +21,7 @@ class DistanceService:
 
     def compute(self, raw_df, reference_df, reference_label: str):
         comparison = raw_df.merge(
-            reference_df[
-                ["chain", "order", "residue_label", "curvature", "torsion"]
-            ].rename(
+            reference_df[["chain", "order", "residue_label", "curvature", "torsion"]].rename(
                 columns={
                     "curvature": "reference_curvature",
                     "torsion": "reference_torsion",

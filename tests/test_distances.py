@@ -6,7 +6,9 @@ import pytest
 from flexgeo2.distances import DistanceService
 
 
-def test_select_reference_rows_defaults_to_first_model(normalized_geometry_df: pd.DataFrame) -> None:
+def test_select_reference_rows_defaults_to_first_model(
+    normalized_geometry_df: pd.DataFrame,
+) -> None:
     selected, label = DistanceService().select_reference_rows(normalized_geometry_df, None)
 
     assert label == "1"
@@ -30,8 +32,12 @@ def test_distance_compute_uses_chain_order_residue_overlap(
         reference_label="input model 1",
     )
 
-    model_two_a2 = long_df[(long_df["chain"] == "A") & (long_df["model"] == "2") & (long_df["order"] == 2)].iloc[0]
-    assert model_two_a2["distance_to_reference"] == pytest.approx(((0.6 - 0.4) ** 2 + (0.9 - 0.5) ** 2) ** 0.5)
+    model_two_a2 = long_df[
+        (long_df["chain"] == "A") & (long_df["model"] == "2") & (long_df["order"] == 2)
+    ].iloc[0]
+    assert model_two_a2["distance_to_reference"] == pytest.approx(
+        ((0.6 - 0.4) ** 2 + (0.9 - 0.5) ** 2) ** 0.5
+    )
     assert set(long_df["reference_label"]) == {"input model 1"}
 
     a1_summary = summary_df[(summary_df["chain"] == "A") & (summary_df["order"] == 1)].iloc[0]

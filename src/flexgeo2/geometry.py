@@ -46,7 +46,8 @@ class GeometryService:
         normalised = df.copy()
         normalised["order"] = normalised["order"].astype(int)
         normalised["residue_label"] = [
-            f"{name}{int(order)}" for order, name in zip(normalised["order"], normalised["name"])
+            f"{name}{int(order)}"
+            for order, name in zip(normalised["order"], normalised["name"], strict=False)
         ]
         return normalised.sort_values(["chain", "model", "order"]).reset_index(drop=True)
 
@@ -75,9 +76,7 @@ class GeometryService:
             on=["chain", "order"],
             how="left",
         )
-        merged["curvature_abs_deviation"] = (
-            merged["curvature"] - merged["curvature_mean"]
-        ).abs()
+        merged["curvature_abs_deviation"] = (merged["curvature"] - merged["curvature_mean"]).abs()
         merged["torsion_abs_deviation"] = (merged["torsion"] - merged["torsion_mean"]).abs()
 
         model_summary = (

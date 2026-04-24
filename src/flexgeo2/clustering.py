@@ -76,9 +76,7 @@ class ClusteringService:
                 min_cluster_size=min_cluster_size,
                 min_samples=min_samples,
             )
-            feature_matrix = np.array(
-                residue_points.to_numpy(), dtype=float, order="C", copy=True
-            )
+            feature_matrix = np.array(residue_points.to_numpy(), dtype=float, order="C", copy=True)
             labels = clusterer.fit_predict(feature_matrix)
             probabilities = getattr(clusterer, "probabilities_", None)
 
@@ -171,9 +169,7 @@ class ClusteringService:
                         min_samples=min_samples,
                     )
                     labels = clusterer.fit_predict(feature_matrix)
-                    probabilities = getattr(
-                        clusterer, "probabilities_", [0.0] * len(feature_table)
-                    )
+                    probabilities = getattr(clusterer, "probabilities_", [0.0] * len(feature_table))
 
                 projection = self.compute_pca_projection(feature_matrix)
                 assignment_df = pd.DataFrame(
@@ -192,11 +188,7 @@ class ClusteringService:
                 assignment_frames.append(assignment_df)
 
                 non_noise_clusters = sorted(
-                    {
-                        int(label)
-                        for label in assignment_df["cluster"].tolist()
-                        if int(label) >= 0
-                    }
+                    {int(label) for label in assignment_df["cluster"].tolist() if int(label) >= 0}
                 )
                 summary_rows.append(
                     {
