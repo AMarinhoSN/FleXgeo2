@@ -3,7 +3,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/AMarinhoSN/FleXgeo2/ci.yml?branch=main&label=CI)](https://github.com/AMarinhoSN/FleXgeo2/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)
-![Version](https://img.shields.io/badge/version-0.1.0-blue)
+![Version](https://img.shields.io/badge/version-v2.0.0-blue)
 ![Code style](https://img.shields.io/badge/code%20style-ruff-46aef7)
 
 ---
