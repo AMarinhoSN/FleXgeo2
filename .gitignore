@@ -6,10 +6,10 @@ __pycache__/
 .pytest_cache/
 
 # Virtual environments
-.venv/
-venv/
-env/
-flexgeo2/
+/.venv/
+/venv/
+/env/
+/flexgeo2/
 
 # Analysis outputs
 results/
