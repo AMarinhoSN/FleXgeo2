@@ -163,6 +163,20 @@ class ChainGeometryPlotter(BasePlotter):
 
 
 class OverviewPlotter(BasePlotter):
+    """Per-residue results along the sequence, one panel per quantity, per chain.
+
+    Curvature, torsion and dmax are always shown; clusters per residue and the distance
+    to the reference are added when those analyses ran.
+    """
+
+    PANEL_HEIGHTS = {
+        "curvature": 2.4,
+        "torsion": 2.4,
+        "dmax": 1.4,
+        "clusters": 1.2,
+        "distance": 1.6,
+    }
+
     def plot(
         self,
         summary_df,
@@ -170,6 +184,8 @@ class OverviewPlotter(BasePlotter):
         raw_df=None,
         show_model_traces: bool = True,
         max_models_in_plot: int = 12,
+        cluster_summary_df=None,
+        distance_summary_df=None,
     ) -> None:
         import matplotlib.pyplot as plt
 
@@ -178,6 +194,8 @@ class OverviewPlotter(BasePlotter):
             raw_df=raw_df,
             show_model_traces=show_model_traces,
             max_models_in_plot=max_models_in_plot,
+            cluster_summary_df=cluster_summary_df,
+            distance_summary_df=distance_summary_df,
         )
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
@@ -188,63 +206,113 @@ class OverviewPlotter(BasePlotter):
         raw_df=None,
         show_model_traces: bool = True,
         max_models_in_plot: int = 12,
+        cluster_summary_df=None,
+        distance_summary_df=None,
     ):
         import matplotlib.pyplot as plt
+        from matplotlib.ticker import MaxNLocator
+
+        panels = ["curvature", "torsion", "dmax"]
+        if cluster_summary_df is not None:
+            panels.append("clusters")
+        if distance_summary_df is not None:
+            panels.append("distance")
+        heights = [self.PANEL_HEIGHTS[panel] for panel in panels]
 
         chains = list(summary_df["chain"].drop_duplicates())
-        fig, axes = plt.subplots(
-            nrows=len(chains),
-            ncols=2,
-            figsize=(14, max(4, 3.8 * len(chains))),
-            constrained_layout=True,
+        fig = plt.figure(
+            figsize=(14, 0.8 + len(chains) * (sum(heights) + 0.6)), constrained_layout=True
+        )
+        grid = fig.add_gridspec(
+            nrows=len(chains) * len(panels), ncols=1, height_ratios=heights * len(chains)
         )
 
-        if len(chains) == 1:
-            axes = [axes]
-
-        for row_axes, chain in zip(axes, chains, strict=False):
-            chain_df = summary_df[summary_df["chain"] == chain]
+        for chain_index, chain in enumerate(chains):
+            chain_df = summary_df[summary_df["chain"] == chain].sort_values("order")
             x_values = chain_df["order"].to_numpy()
-            residue_labels = chain_df["residue_label"].tolist()
-            title_suffix = f"Chain {chain}" if chain not in (None, "") else "Chain"
+            axes = {}
+            for panel_index, panel in enumerate(panels):
+                shared = axes.get("curvature")
+                axes[panel] = fig.add_subplot(
+                    grid[chain_index * len(panels) + panel_index], sharex=shared
+                )
 
             if show_model_traces and raw_df is not None:
                 self.plot_model_traces(
-                    row_axes[0],
-                    row_axes[1],
+                    axes["curvature"],
+                    axes["torsion"],
                     raw_df[raw_df["chain"] == chain],
                     max_models_in_plot,
                 )
+            for name, line_color, band_color in (
+                ("curvature", "#1f4e79", "#4c78a8"),
+                ("torsion", "#b22222", "#e45756"),
+            ):
+                self._mean_and_band(
+                    axes[name],
+                    x_values,
+                    chain_df[f"{name}_mean"],
+                    chain_df[f"{name}_std"],
+                    line_color,
+                    band_color,
+                )
+            axes["curvature"].set_ylabel("Curvature (1/Å)")
+            axes["torsion"].set_ylabel("Torsion (1/Å)")
 
-            row_axes[0].plot(x_values, chain_df["curvature_mean"], color="#1f4e79", linewidth=2)
-            row_axes[0].fill_between(
-                x_values,
-                chain_df["curvature_mean"] - chain_df["curvature_std"],
-                chain_df["curvature_mean"] + chain_df["curvature_std"],
-                color="#4c78a8",
-                alpha=0.18,
-            )
-            row_axes[0].set_title(f"{title_suffix}: Curvature")
-            row_axes[0].set_ylabel("Curvature")
+            axes["dmax"].bar(x_values, chain_df["dmax"], width=0.8, color="#6a3d9a")
+            axes["dmax"].set_ylabel("dmax")
 
-            row_axes[1].plot(x_values, chain_df["torsion_mean"], color="#b22222", linewidth=2)
-            row_axes[1].fill_between(
-                x_values,
-                chain_df["torsion_mean"] - chain_df["torsion_std"],
-                chain_df["torsion_mean"] + chain_df["torsion_std"],
-                color="#e45756",
-                alpha=0.18,
-            )
-            row_axes[1].set_title(f"{title_suffix}: Torsion")
-            row_axes[1].set_ylabel("Torsion")
+            if cluster_summary_df is not None:
+                clusters = self._align(chain_df, cluster_summary_df, chain, ["n_clusters"])
+                axes["clusters"].bar(
+                    x_values, clusters["n_clusters"].fillna(0), width=0.8, color="#4c4c4c"
+                )
+                axes["clusters"].set_ylabel("Clusters")
+                axes["clusters"].yaxis.set_major_locator(MaxNLocator(integer=True))
 
-            for axis in row_axes:
-                axis.set_xlabel("Residue")
+            if distance_summary_df is not None:
+                distances = self._align(
+                    chain_df, distance_summary_df, chain, ["distance_mean", "distance_std"]
+                )
+                self._mean_and_band(
+                    axes["distance"],
+                    x_values,
+                    distances["distance_mean"],
+                    distances["distance_std"],
+                    "#b35806",
+                    "#fdb863",
+                )
+                axes["distance"].set_ylabel("Distance to\nreference")
+
+            title = f"Chain {chain}" if chain not in (None, "") else "Chain"
+            axes["curvature"].set_title(title)
+            for panel in panels:
+                axis = axes[panel]
                 axis.grid(alpha=0.3)
-                self.apply_residue_ticks(axis, x_values, residue_labels)
+                if panel in ("dmax", "clusters"):
+                    axis.grid(axis="x", visible=False)
+                axis.tick_params(labelbottom=False)
+            if len(x_values):
+                # Bars would otherwise pad the shared axis with wide empty margins.
+                axes["curvature"].set_xlim(x_values.min() - 0.6, x_values.max() + 0.6)
+            bottom = axes[panels[-1]]
+            bottom.tick_params(labelbottom=True)
+            bottom.set_xlabel("Residue")
+            self.apply_residue_ticks(bottom, x_values, chain_df["residue_label"].tolist())
 
         fig.suptitle("Ensemble Overview", fontsize=16, fontweight="bold")
         return fig
+
+    @staticmethod
+    def _mean_and_band(axis, x_values, mean, std, line_color, band_color) -> None:
+        axis.plot(x_values, mean, color=line_color, linewidth=2)
+        axis.fill_between(x_values, mean - std, mean + std, color=band_color, alpha=0.18)
+
+    @staticmethod
+    def _align(chain_df, other_df, chain, columns):
+        """Values of ``columns`` for each residue of ``chain_df``; NaN where absent."""
+        chain_rows = other_df[other_df["chain"] == chain][["order", *columns]]
+        return chain_df[["order"]].merge(chain_rows, on="order", how="left")
 
 
 class DistanceHeatmapPlotter:

@@ -167,14 +167,17 @@ def test_every_plotter_writes_a_readable_png(
     output = tmp_path / f"{plotter}.png"
     chain_raw_df, chain_summary_df = chain_frames(normalized_geometry_df)
     map_summary, map_assignments = cluster_map_frames({1: [0, 0, 1], 2: [-1, 0, 0]})
+    overview_summary = GeometryService().summarize(normalized_geometry_df)
     calls = {
         "chain": lambda: ChainGeometryPlotter().plot(
             chain_raw_df, chain_summary_df, output, show_model_traces=True, max_models_in_plot=12
         ),
         "overview": lambda: OverviewPlotter().plot(
-            GeometryService().summarize(normalized_geometry_df),
+            overview_summary,
             output,
             raw_df=normalized_geometry_df,
+            cluster_summary_df=overview_extras(overview_summary)[0],
+            distance_summary_df=overview_extras(overview_summary)[1],
         ),
         "heatmap": lambda: DistanceHeatmapPlotter().plot(distance_long_df, output, "title"),
         "residue_cluster": lambda: ResidueClusterPlotter().plot(
@@ -259,17 +262,88 @@ def test_cluster_plots_handle_blank_chain_and_many_clusters(
     assert legend_labels(figure) == [f"Cluster {index}" for index in range(12)]
 
 
-def test_overview_has_one_row_per_chain(normalized_geometry_df: pd.DataFrame) -> None:
-    summary_df = GeometryService().summarize(normalized_geometry_df)
+def overview_extras(summary_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Cluster and distance summaries for every residue, in reverse sequence order."""
+    residues = summary_df[["chain", "order"]].iloc[::-1].reset_index(drop=True)
+    clusters = residues.assign(n_clusters=range(1, len(residues) + 1))
+    distances = residues.assign(
+        distance_mean=[0.5 * (index + 1) for index in range(len(residues))],
+        distance_std=0.1,
+    )
+    return clusters, distances
 
-    fig = OverviewPlotter().render(summary_df, raw_df=normalized_geometry_df)
+
+def panel_labels(figure: Figure) -> list[str]:
+    return [axis.get_ylabel() for axis in figure.axes]
+
+
+@pytest.mark.parametrize(
+    ("with_clusters", "with_distances", "expected"),
+    [
+        (False, False, ["Curvature (1/Å)", "Torsion (1/Å)", "dmax"]),
+        (True, False, ["Curvature (1/Å)", "Torsion (1/Å)", "dmax", "Clusters"]),
+        (False, True, ["Curvature (1/Å)", "Torsion (1/Å)", "dmax", "Distance to\nreference"]),
+        (
+            True,
+            True,
+            ["Curvature (1/Å)", "Torsion (1/Å)", "dmax", "Clusters", "Distance to\nreference"],
+        ),
+    ],
+)
+def test_overview_adds_panels_for_the_analyses_that_ran(
+    normalized_geometry_df: pd.DataFrame,
+    with_clusters: bool,
+    with_distances: bool,
+    expected: list[str],
+) -> None:
+    summary_df = GeometryService().summarize(normalized_geometry_df)
+    clusters, distances = overview_extras(summary_df)
+
+    fig = OverviewPlotter().render(
+        summary_df,
+        cluster_summary_df=clusters if with_clusters else None,
+        distance_summary_df=distances if with_distances else None,
+    )
     try:
-        assert [axis.get_title() for axis in fig.axes] == [
-            "Chain A: Curvature",
-            "Chain A: Torsion",
-            "Chain B: Curvature",
-            "Chain B: Torsion",
-        ]
+        # Two chains, each with the same stack of panels.
+        assert panel_labels(fig) == expected * 2
+        titles = [axis.get_title() for axis in fig.axes]
+        assert titles == ["Chain A"] + [""] * (len(expected) - 1) + ["Chain B"] + [""] * (
+            len(expected) - 1
+        )
+        # Only the bottom panel of each chain shows residue labels.
+        bottoms = {len(expected) - 1, 2 * len(expected) - 1}
+        for index, axis in enumerate(fig.axes):
+            assert axis.xaxis.get_tick_params()["labelbottom"] is (index in bottoms), index
+    finally:
+        plt.close(fig)
+
+
+def test_overview_panels_line_up_by_residue(normalized_geometry_df: pd.DataFrame) -> None:
+    summary_df = GeometryService().summarize(normalized_geometry_df)
+    clusters, distances = overview_extras(summary_df)
+    # Chain A residue 2 was not compared with the reference.
+    distances = distances.drop(
+        distances[(distances["chain"] == "A") & (distances["order"] == 2)].index
+    )
+
+    fig = OverviewPlotter().render(
+        summary_df, cluster_summary_df=clusters, distance_summary_df=distances
+    )
+    try:
+        _, _, dmax_axis, clusters_axis, distance_axis = fig.axes[:5]
+        chain_a = summary_df[summary_df["chain"] == "A"].sort_values("order")
+        assert [bar.get_x() + bar.get_width() / 2 for bar in dmax_axis.patches] == [1, 2]
+        assert dmax_axis.get_xlim() == pytest.approx((0.4, 2.6))
+        assert [bar.get_height() for bar in dmax_axis.patches] == pytest.approx(
+            chain_a["dmax"].tolist()
+        )
+        # overview_extras numbers residues in reverse: B1 -> 1, A2 -> 2, A1 -> 3.
+        assert [bar.get_height() for bar in clusters_axis.patches] == [3, 2]
+        [mean_line] = distance_axis.get_lines()
+        assert mean_line.get_xdata().tolist() == [1, 2]
+        assert mean_line.get_ydata()[0] == pytest.approx(1.5)
+        assert np.isnan(mean_line.get_ydata()[1])
     finally:
         plt.close(fig)
 

@@ -434,3 +434,28 @@ def test_output_path_that_is_a_file_is_rejected(
         make_writer(output_path, plotters).write(
             base_result, max_models_in_plot=12, hide_model_traces=False
         )
+
+
+def test_overview_gets_the_summaries_of_the_analyses_that_ran(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+) -> None:
+    make_writer(tmp_path, plotters).write(
+        full_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    [overview_call] = plotters["overview_plotter"].calls
+    kwargs = overview_call["kwargs"]
+    assert kwargs["cluster_summary_df"] is full_result.residue_clustering.summary_df
+    assert kwargs["distance_summary_df"] is full_result.distance_result.summary_df
+
+
+def test_overview_without_optional_analyses_gets_no_summaries(
+    tmp_path: Path, plotters: dict, base_result: AnalysisResult
+) -> None:
+    make_writer(tmp_path, plotters).write(
+        base_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    [overview_call] = plotters["overview_plotter"].calls
+    assert overview_call["kwargs"]["cluster_summary_df"] is None
+    assert overview_call["kwargs"]["distance_summary_df"] is None

@@ -77,8 +77,10 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
     OutputFile(
         "overview.png",
         "overview.png",
-        "Curvature and torsion along the sequence: ensemble mean +/- standard deviation, "
-        "with individual model traces.",
+        "Per-residue results along the sequence, one panel each: curvature and torsion "
+        "(ensemble mean +/- standard deviation, with individual model traces), dmax, and, "
+        "when those analyses ran, clusters per residue and the mean distance to the "
+        "reference (+/- standard deviation).",
     ),
     OutputFile(
         "geometry/descriptors.csv",

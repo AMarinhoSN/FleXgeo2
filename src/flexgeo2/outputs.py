@@ -156,6 +156,14 @@ class OutputWriter:
             raw_df=result.raw_df,
             show_model_traces=not hide_model_traces,
             max_models_in_plot=max_models_in_plot,
+            cluster_summary_df=(
+                result.residue_clustering.summary_df
+                if result.residue_clustering is not None
+                else None
+            ),
+            distance_summary_df=(
+                result.distance_result.summary_df if result.distance_result is not None else None
+            ),
         )
 
         if artifacts.model_summary_csv is not None:
