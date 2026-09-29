@@ -12,7 +12,67 @@ from flexgeo2.plotting import (
     ResidueRangeClusterPlotter,
     sanitize_chain_id,
 )
-from flexgeo2.report import write_report
+from flexgeo2.report import write_report, written_files
+
+# Folders FleXgeo2 creates inside output_dir, deepest first so they can be removed in order.
+OUTPUT_SUBDIRS = (
+    "reference/matrices",
+    "clusters/residue_plots",
+    "geometry",
+    "reference",
+    "clusters",
+    "range_clusters",
+)
+
+
+class OutputDirectoryNotEmptyError(FileExistsError):
+    """The output folder already has files and overwriting was not requested."""
+
+    def __init__(self, output_dir: Path) -> None:
+        self.output_dir = output_dir
+        super().__init__(
+            f"Output folder {output_dir} is not empty. Set OutputConfig(overwrite=True) to "
+            "replace the outputs of an earlier run, or choose another output_dir."
+        )
+
+
+def check_output_dir(config: OutputConfig) -> None:
+    """Fail if writing would mix new outputs with files already in the output folder.
+
+    Hidden files (e.g. ``.DS_Store``) do not count. With ``overwrite=True`` a folder
+    holding an earlier run is accepted; ``remove_previous_outputs`` clears it later.
+    """
+    if not config.write_files:
+        return
+    if config.output_dir is None:
+        raise ValueError("OutputConfig.output_dir must be set when write_files=True.")
+
+    output_dir = Path(config.output_dir).resolve()
+    if not output_dir.exists():
+        return
+    if not output_dir.is_dir():
+        raise ValueError(f"Output path {output_dir} exists and is not a folder.")
+    if not any(not entry.name.startswith(".") for entry in output_dir.iterdir()):
+        return
+    if not config.overwrite:
+        raise OutputDirectoryNotEmptyError(output_dir)
+    # Every run writes README.md and run.json together, so a README.md without run.json
+    # belongs to someone else (e.g. --output-dir pointing at a project folder).
+    if (output_dir / "README.md").exists() and not (output_dir / "run.json").exists():
+        raise ValueError(
+            f"{output_dir} has a README.md that FleXgeo2 did not write; overwriting would "
+            "replace it. Choose another output folder."
+        )
+
+
+def remove_previous_outputs(output_dir: Path) -> None:
+    """Delete the files an earlier run wrote, so none are left stale; keep all others."""
+    for name in written_files(output_dir):
+        (output_dir / name).unlink(missing_ok=True)
+    for name in OUTPUT_SUBDIRS:
+        directory = output_dir / name
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
 
 
 class OutputWriter:
@@ -42,11 +102,11 @@ class OutputWriter:
         if not self.config.write_files:
             return OutputArtifacts()
 
-        if self.config.output_dir is None:
-            raise ValueError("OutputConfig.output_dir must be set when write_files=True.")
-
+        check_output_dir(self.config)
         verbose = self.config.verbose
         output_dir = Path(self.config.output_dir).resolve()
+        if self.config.overwrite:
+            remove_previous_outputs(output_dir)
         geometry_dir = output_dir / "geometry"
         reference_dir = output_dir / "reference" if result.distance_result is not None else None
         clusters_dir = output_dir / "clusters" if result.residue_clustering is not None else None

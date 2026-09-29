@@ -16,7 +16,7 @@ from flexgeo2.models import (
     ResidueClusteringResult,
     ResidueRangeClusteringResult,
 )
-from flexgeo2.outputs import OutputWriter
+from flexgeo2.outputs import OutputDirectoryNotEmptyError, OutputWriter
 
 
 class RecordingPlotter:
@@ -49,8 +49,11 @@ def make_writer(
     plotters: dict[str, RecordingPlotter],
     verbose: bool = False,
     write_files: bool = True,
+    overwrite: bool = False,
 ) -> OutputWriter:
-    config = OutputConfig(output_dir=output_dir, verbose=verbose, write_files=write_files)
+    config = OutputConfig(
+        output_dir=output_dir, verbose=verbose, write_files=write_files, overwrite=overwrite
+    )
     return OutputWriter(config, **plotters)
 
 
@@ -351,3 +354,79 @@ def test_residue_plot_names_sort_in_sequence_order() -> None:
     assert sorted(names) == names
     assert names[3] == "A_0045_ALA.png"
     assert OutputWriter.residue_plot_name("", 7, "GLY") == "unassigned_0007_GLY.png"
+
+
+def test_non_empty_output_dir_is_refused(
+    tmp_path: Path, plotters: dict, base_result: AnalysisResult
+) -> None:
+    (tmp_path / "notes.txt").write_text("mine")
+
+    with pytest.raises(OutputDirectoryNotEmptyError, match="overwrite=True"):
+        make_writer(tmp_path, plotters).write(
+            base_result, max_models_in_plot=12, hide_model_traces=False
+        )
+
+    assert written_files(tmp_path) == {"notes.txt"}
+
+
+def test_hidden_files_do_not_make_output_dir_non_empty(
+    tmp_path: Path, plotters: dict, base_result: AnalysisResult
+) -> None:
+    (tmp_path / ".DS_Store").write_text("")
+
+    make_writer(tmp_path, plotters).write(
+        base_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    assert written_files(tmp_path) == BASE_FILES | {".DS_Store"}
+
+
+def test_overwrite_removes_stale_outputs_and_keeps_other_files(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+) -> None:
+    make_writer(tmp_path, plotters, verbose=True).write(
+        full_result, max_models_in_plot=12, hide_model_traces=False
+    )
+    (tmp_path / "notes.txt").write_text("mine")
+    (tmp_path / "clusters" / "picked.txt").write_text("mine too")
+    full_result.distance_result = None
+    full_result.residue_range_clustering = None
+
+    make_writer(tmp_path, plotters, overwrite=True).write(
+        full_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    # Reference and range-clustering outputs are gone; residue clusters are rewritten.
+    assert written_files(tmp_path) == {
+        name
+        for name in FULL_DEFAULT_FILES
+        if not name.startswith(("reference/", "range_clusters/"))
+    } | {"notes.txt", "clusters/picked.txt"}
+    assert not (tmp_path / "reference").exists()
+    assert not (tmp_path / "range_clusters").exists()
+    assert (tmp_path / "notes.txt").read_text() == "mine"
+
+
+def test_overwrite_refuses_a_readme_flexgeo2_did_not_write(
+    tmp_path: Path, plotters: dict, base_result: AnalysisResult
+) -> None:
+    (tmp_path / "README.md").write_text("# My project")
+
+    with pytest.raises(ValueError, match="README.md that FleXgeo2 did not write"):
+        make_writer(tmp_path, plotters, overwrite=True).write(
+            base_result, max_models_in_plot=12, hide_model_traces=False
+        )
+
+    assert (tmp_path / "README.md").read_text() == "# My project"
+
+
+def test_output_path_that_is_a_file_is_rejected(
+    tmp_path: Path, plotters: dict, base_result: AnalysisResult
+) -> None:
+    output_path = tmp_path / "results"
+    output_path.write_text("")
+
+    with pytest.raises(ValueError, match="exists and is not a folder"):
+        make_writer(output_path, plotters).write(
+            base_result, max_models_in_plot=12, hide_model_traces=False
+        )

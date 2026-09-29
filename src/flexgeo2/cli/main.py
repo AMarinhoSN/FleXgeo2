@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from flexgeo2.config import AnalysisConfig, ClusteringConfig, OutputConfig, ReferenceConfig
+from flexgeo2.outputs import OutputDirectoryNotEmptyError
 from flexgeo2.pipeline import FlexGeo2App
 
 
@@ -56,6 +57,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("results"),
         help="Directory for CSV and plot outputs. Default: results",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help=(
+            "Replace the outputs of an earlier run in --output-dir. Without it, FleXgeo2 "
+            "refuses to write into a folder that is not empty. Other files are kept."
+        ),
     )
     parser.add_argument(
         "--chain",
@@ -163,6 +172,7 @@ def build_config(args: argparse.Namespace) -> AnalysisConfig:
         output_dir=args.output_dir,
         verbose=args.output_verbose,
         write_files=True,
+        overwrite=args.overwrite,
     )
 
     return AnalysisConfig(
@@ -225,6 +235,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(parser, argv)
     try:
         result = FlexGeo2App().run(build_config(args))
+    except OutputDirectoryNotEmptyError as exc:
+        print(
+            f"{parser.prog}: error: output folder {exc.output_dir} is not empty. "
+            "Use --overwrite to replace the outputs of an earlier run, or choose another "
+            "--output-dir.",
+            file=sys.stderr,
+        )
+        return 1
     except (FileNotFoundError, ValueError) as exc:
         print(f"{parser.prog}: error: {exc}", file=sys.stderr)
         return 1

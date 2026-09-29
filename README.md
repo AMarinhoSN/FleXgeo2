@@ -208,6 +208,11 @@ selected by filtering that column.
 Residue plot names start with the zero-padded residue number
 (e.g. `A_0045_ALA.png`), so they sort in sequence order.
 
+FleXgeo2 will not write into an output folder that already contains files, so results
+from different runs never mix. To rerun into the same folder, add `--overwrite`
+(`OutputConfig(overwrite=True)` in Python): the files of the earlier run are removed
+first, and any other files in the folder are kept.
+
 ---
 
 ## Notes

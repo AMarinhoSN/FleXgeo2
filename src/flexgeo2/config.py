@@ -32,6 +32,8 @@ class OutputConfig:
     output_dir: PathLike | None = Path("results")
     verbose: bool = False
     write_files: bool = True
+    # Allow writing into a non-empty output_dir, replacing an earlier run's outputs.
+    overwrite: bool = False
 
 
 @dataclass(slots=True)

@@ -7,6 +7,7 @@ from pathlib import Path
 from flexgeo2.clustering import ClusteringService
 from flexgeo2.config import AnalysisConfig
 from flexgeo2.geometry import GeometryService, StructureInfo
+from flexgeo2.outputs import check_output_dir
 
 
 def validate_config(config: AnalysisConfig) -> None:
@@ -43,6 +44,8 @@ def validate_config(config: AnalysisConfig) -> None:
             raise ValueError("min_samples must be a positive integer.")
     for range_text in clustering.cluster_residue_ranges:
         ClusteringService.parse_residue_range(range_text)
+
+    check_output_dir(config.output)
 
 
 def _check_model(model_id: str, info: StructureInfo, source: str) -> None:

@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from flexgeo2.config import AnalysisConfig, ClusteringConfig, ReferenceConfig
+from flexgeo2.config import AnalysisConfig, ClusteringConfig, OutputConfig, ReferenceConfig
 from flexgeo2.geometry import StructureInfo
+from flexgeo2.outputs import OutputDirectoryNotEmptyError
 from flexgeo2.validation import validate_against_structure, validate_config
 
 
@@ -85,6 +86,21 @@ def test_validate_config_rejects_invalid_options(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         validate_config(AnalysisConfig(pdb_file=pdb_file, **overrides))
+
+
+def test_validate_config_rejects_non_empty_output_dir(pdb_file: Path, tmp_path: Path) -> None:
+    # tmp_path already holds the input PDB.
+    with pytest.raises(OutputDirectoryNotEmptyError):
+        validate_config(AnalysisConfig(pdb_file=pdb_file, output=OutputConfig(output_dir=tmp_path)))
+
+    validate_config(
+        AnalysisConfig(pdb_file=pdb_file, output=OutputConfig(output_dir=tmp_path, overwrite=True))
+    )
+    validate_config(
+        AnalysisConfig(
+            pdb_file=pdb_file, output=OutputConfig(output_dir=tmp_path, write_files=False)
+        )
+    )
 
 
 def test_validate_against_structure_accepts_valid_selection(

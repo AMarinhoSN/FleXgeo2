@@ -38,6 +38,7 @@ def test_build_config_maps_cli_flags() -> None:
             "--cluster-residue-range",
             "10-12",
             "--output-verbose",
+            "--overwrite",
         ]
     )
 
@@ -47,6 +48,7 @@ def test_build_config_maps_cli_flags() -> None:
     assert config.output.output_dir == Path("out")
     assert config.output.verbose is True
     assert config.output.write_files is True
+    assert config.output.overwrite is True
     assert config.chains == ["A", "B"]
     assert config.n_jobs == 2
     assert config.max_models_in_plot == 5
@@ -127,3 +129,31 @@ def test_main_validates_before_running_melodia(
     assert exit_code == 1
     assert message in capsys.readouterr().err
     assert not (tmp_path / "out").exists()
+
+
+def test_main_refuses_to_reuse_output_dir_without_overwrite(
+    monkeypatch: pytest.MonkeyPatch, mini_ensemble_pdb: Path, tmp_path: Path, capsys
+) -> None:
+    output_dir = tmp_path / "out"
+    assert main([str(mini_ensemble_pdb), "--output-dir", str(output_dir)]) == 0
+    first_run = (output_dir / "run.json").read_text()
+    capsys.readouterr()
+
+    def fail_compute_geometry(*args, **kwargs):
+        raise AssertionError("Melodia should not run when the output folder is in use.")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(GeometryService, "compute_geometry", fail_compute_geometry)
+        exit_code = main([str(mini_ensemble_pdb), "--output-dir", str(output_dir)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.err == (
+        f"flexgeo2: error: output folder {output_dir.resolve()} is not empty. Use "
+        "--overwrite to replace the outputs of an earlier run, or choose another "
+        "--output-dir.\n"
+    )
+    assert (output_dir / "run.json").read_text() == first_run
+
+    assert main([str(mini_ensemble_pdb), "--output-dir", str(output_dir), "--overwrite"]) == 0
+    assert (output_dir / "run.json").read_text() != first_run
