@@ -1,0 +1,151 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from datetime import datetime, timezone
+from importlib import metadata
+from pathlib import Path
+
+import pandas as pd
+import pytest
+
+from flexgeo2 import AnalysisConfig, ClusteringConfig, FlexGeo2App, OutputConfig
+from flexgeo2.cli.main import main
+from flexgeo2.report import FILE_GUIDE, render_readme, written_files
+
+pytest.importorskip("melodia_py")
+
+MINI_ENSEMBLE = Path(__file__).parent / "data" / "mini_ensemble.pdb"
+
+
+@pytest.fixture(scope="module")
+def full_run(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Every analysis and every optional table, on the three-model fixture."""
+    output_dir = tmp_path_factory.mktemp("report") / "out"
+    exit_code = main(
+        [
+            str(MINI_ENSEMBLE),
+            "--output-dir",
+            str(output_dir),
+            "--reference-pdb",
+            str(MINI_ENSEMBLE),
+            "--reference-pdb-model",
+            "2",
+            "--cluster-residues",
+            "--cluster-residue-range",
+            "2-5",
+            "--cluster-min-size",
+            "2",
+            "--output-verbose",
+        ]
+    )
+    assert exit_code == 0
+    return output_dir
+
+
+def files_on_disk(output_dir: Path) -> list[str]:
+    return sorted(
+        path.relative_to(output_dir).as_posix() for path in output_dir.rglob("*") if path.is_file()
+    )
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_every_csv_column_is_described(full_run: Path) -> None:
+    guide = {entry.pattern: entry for entry in FILE_GUIDE}
+    csv_files = [name for name in files_on_disk(full_run) if name.endswith(".csv")]
+    assert csv_files, "the run should have written CSV files"
+
+    for name in csv_files:
+        if name.startswith("reference/matrices/"):
+            continue  # one column per residue; described as a whole
+        columns = pd.read_csv(full_run / name, nrows=0).columns.tolist()
+        assert name in guide, f"{name} has no entry in the file guide"
+        assert set(columns) == set(guide[name].columns), name
+
+
+def test_guide_and_manifest_cover_exactly_the_files_written(full_run: Path) -> None:
+    manifest = json.loads((full_run / "run.json").read_text())
+
+    assert manifest["outputs"] == files_on_disk(full_run)
+    assert written_files(full_run) == files_on_disk(full_run)
+
+
+def test_readme_describes_every_output_that_was_written(full_run: Path) -> None:
+    readme = (full_run / "README.md").read_text()
+
+    for entry in FILE_GUIDE:
+        assert f"`{entry.display}`" in readme, entry.display
+        for column in entry.columns:
+            assert f"`{column}`" in readme, (entry.display, column)
+
+
+def test_readme_skips_outputs_of_analyses_that_did_not_run(tmp_path: Path) -> None:
+    output_dir = tmp_path / "out"
+    assert main([str(MINI_ENSEMBLE), "--output-dir", str(output_dir)]) == 0
+
+    readme = (output_dir / "README.md").read_text()
+
+    assert "`geometry/residues.csv`" in readme
+    for absent in ("reference/", "clusters/", "range_clusters/", "models_by_chain"):
+        assert absent not in readme, absent
+    assert "Distance to reference" not in readme
+
+
+def test_manifest_records_inputs_parameters_and_versions(full_run: Path) -> None:
+    manifest = json.loads((full_run / "run.json").read_text())
+
+    assert manifest["input"] == {
+        "pdb_file": str(MINI_ENSEMBLE.resolve()),
+        "sha256": sha256(MINI_ENSEMBLE),
+        "models": 3,
+        "chains": ["A"],
+        "residues": 10,
+    }
+    assert manifest["reference"] == {
+        "label": "mini_ensemble.pdb model 2",
+        "pdb_file": str(MINI_ENSEMBLE.resolve()),
+        "sha256": sha256(MINI_ENSEMBLE),
+    }
+    parameters = manifest["parameters"]
+    assert parameters["clustering"] == {
+        "cluster_residues": True,
+        "cluster_residue_ranges": ["2-5"],
+        "min_cluster_size": 2,
+        "min_samples": None,
+    }
+    assert parameters["reference"]["pdb_model_id"] == "2"
+    assert parameters["output"]["verbose"] is True
+    assert manifest["flexgeo2_version"] == metadata.version("FleXgeo2")
+    assert manifest["environment"]["packages"]["FleXgeo2"] == metadata.version("FleXgeo2")
+    assert datetime.fromisoformat(manifest["created_utc"]).tzinfo is not None
+
+
+def test_readme_key_results_match_the_tables(full_run: Path) -> None:
+    readme = (full_run / "README.md").read_text()
+    residues = pd.read_csv(full_run / "geometry" / "residues.csv")
+    clusters = pd.read_csv(full_run / "clusters" / "residues.csv")
+
+    most_flexible = residues.nlargest(1, "dmax").iloc[0]
+    assert f"| A {most_flexible['residue_label']} | {most_flexible['dmax']:.3f} |" in readme
+    n_split = int((clusters["n_clusters"] >= 2).sum())
+    assert f"{n_split} of {len(clusters)} residues split into two or more clusters" in readme
+    assert "- Distance to reference: mini_ensemble.pdb model 2." in readme
+
+
+def test_readme_suggests_smaller_clusters_when_a_range_is_all_noise(tmp_path: Path) -> None:
+    config = AnalysisConfig(
+        pdb_file=MINI_ENSEMBLE,
+        clustering=ClusteringConfig(cluster_residue_ranges=["2-5"], min_cluster_size=5),
+        output=OutputConfig(write_files=False),
+    )
+    result = FlexGeo2App().run(config)
+    # Three models with min_cluster_size 5 cannot form a cluster.
+    assert result.residue_range_clustering.summary_df["n_clusters"].tolist() == [0]
+
+    readme = render_readme(result, tmp_path, datetime.now(timezone.utc))
+
+    assert "| A | 2-5 | 0 | 1.00 |" in readme
+    assert "consider a smaller `--cluster-min-size`" in readme

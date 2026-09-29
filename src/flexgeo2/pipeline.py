@@ -81,6 +81,7 @@ class FlexGeo2App:
             distance_result=distance_result,
             residue_clustering=residue_clustering,
             residue_range_clustering=residue_range_clustering,
+            config=config,
         )
 
         writer = self.output_writer_cls(config.output)

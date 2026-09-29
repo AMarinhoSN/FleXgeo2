@@ -140,6 +140,8 @@ def artifact_paths(artifacts: OutputArtifacts) -> dict[str, Path]:
 
 
 BASE_FILES = {
+    "README.md",
+    "run.json",
     "overview.png",
     "geometry/descriptors.csv",
     "geometry/residues.csv",
@@ -201,6 +203,8 @@ def test_default_mode_writes_only_core_outputs(
         "residue_summary_csv",
         "overall_model_summary_csv",
         "overview_plot",
+        "readme",
+        "run_manifest",
     }
 
 

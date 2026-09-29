@@ -176,6 +176,8 @@ only created when that analysis runs. By default the output directory contains:
 
 ```
 results/
+├── README.md                    # start here: what ran, key results, guide to every file
+├── run.json                     # parameters, package versions, input checksums
 ├── overview.png                 # curvature and torsion along the sequence
 ├── geometry/
 │   ├── descriptors.csv          # per model and residue: curvature, torsion, ...

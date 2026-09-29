@@ -188,6 +188,7 @@ def print_run_summary(result) -> None:
     print(f"Models: {model_count}")
     print(f"Chains: {chain_count}")
     print(f"Residues: {residue_count}")
+    print(f"Guide to the outputs: {outputs.readme}")
     print(f"Raw descriptors: {outputs.raw_csv}")
     print(f"Residue summary: {outputs.residue_summary_csv}")
     print(f"Overall model summary: {outputs.overall_model_summary_csv}")

@@ -12,6 +12,7 @@ from flexgeo2.plotting import (
     ResidueRangeClusterPlotter,
     sanitize_chain_id,
 )
+from flexgeo2.report import write_report
 
 
 class OutputWriter:
@@ -134,6 +135,8 @@ class OutputWriter:
                 result.residue_range_clustering.assignments_df, artifacts.range_cluster_plots_dir
             )
 
+        # Last, so the guide and manifest describe the files that now exist.
+        artifacts.readme, artifacts.run_manifest = write_report(result, output_dir)
         return artifacts
 
     @staticmethod

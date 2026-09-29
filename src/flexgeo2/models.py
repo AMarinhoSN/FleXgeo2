@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from flexgeo2.config import AnalysisConfig
+
 
 @dataclass(slots=True)
 class DistanceResult:
@@ -40,6 +42,8 @@ class OutputArtifacts:
     range_cluster_assignments_csv: Path | None = None
     range_cluster_summary_csv: Path | None = None
     range_cluster_plots_dir: Path | None = None
+    readme: Path | None = None
+    run_manifest: Path | None = None
 
 
 @dataclass(slots=True)
@@ -52,4 +56,5 @@ class AnalysisResult:
     distance_result: DistanceResult | None = None
     residue_clustering: ResidueClusteringResult | None = None
     residue_range_clustering: ResidueRangeClusteringResult | None = None
+    config: AnalysisConfig | None = None
     outputs: OutputArtifacts | None = None
