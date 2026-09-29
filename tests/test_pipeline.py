@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from flexgeo2.config import AnalysisConfig, OutputConfig, ReferenceConfig
+from flexgeo2.geometry import StructureInfo
 from flexgeo2.models import OutputArtifacts
 from flexgeo2.pipeline import FlexGeo2App
 
@@ -17,8 +18,21 @@ class FakeGeometryService:
     def ensure_dependencies(self) -> None:
         self.calls.append("ensure_dependencies")
 
-    def load_structure(self, pdb_file: Path, n_jobs: int = 1) -> pd.DataFrame:
-        self.calls.append(f"load_structure:{Path(pdb_file).name}:{n_jobs}")
+    def parse_structure(self, pdb_file: Path) -> str:
+        self.calls.append(f"parse_structure:{Path(pdb_file).name}")
+        return Path(pdb_file).name
+
+    def describe_structure(self, structure: str) -> StructureInfo:
+        self.calls.append(f"describe_structure:{structure}")
+        return StructureInfo(
+            model_ids=sorted(int(model) for model in self.raw_df["model"].unique()),
+            residues_by_chain={
+                chain: set(chain_df["order"]) for chain, chain_df in self.raw_df.groupby("chain")
+            },
+        )
+
+    def compute_geometry(self, structure: str, n_jobs: int = 1) -> pd.DataFrame:
+        self.calls.append(f"compute_geometry:{structure}:{n_jobs}")
         return self.raw_df.copy()
 
     def filter_chains(self, df: pd.DataFrame, chains: list[str] | None) -> pd.DataFrame:
@@ -176,7 +190,9 @@ def test_app_run_with_reference_model_wires_distance_result(
     assert result.distance_result.reference_label == "input model 1"
     assert geometry.calls == [
         "ensure_dependencies",
-        "load_structure:ensemble.pdb:2",
+        "parse_structure:ensemble.pdb",
+        "describe_structure:ensemble.pdb",
+        "compute_geometry:ensemble.pdb:2",
         "filter_chains:['A']",
         "normalize",
         "summarize:0.05",

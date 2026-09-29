@@ -56,3 +56,23 @@ def test_distance_compute_rejects_no_overlap(normalized_geometry_df: pd.DataFram
             reference_df=reference_df,
             reference_label="external",
         )
+
+
+def test_to_matrix_orders_residues_by_sequence_not_label() -> None:
+    long_df = pd.DataFrame(
+        [
+            {"model": model, "order": order, "residue_label": label, "distance_to_reference": d}
+            for model, d0 in ((2, 0.2), (1, 0.1))
+            for (order, label), d in zip(
+                [(10, "ALA10"), (2, "VAL2"), (1, "MET1")],
+                [d0, d0 + 1, d0 + 2],
+                strict=True,
+            )
+        ]
+    )
+
+    matrix = DistanceService.to_matrix(long_df)
+
+    assert matrix.columns.tolist() == ["MET1", "VAL2", "ALA10"]
+    assert matrix.index.tolist() == [1, 2]
+    assert matrix.loc[1].tolist() == pytest.approx([2.1, 1.1, 0.1])

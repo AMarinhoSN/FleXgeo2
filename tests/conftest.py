@@ -1,7 +1,20 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pandas as pd
 import pytest
+
+os.environ.setdefault("MPLBACKEND", "Agg")
+
+DATA_DIR = Path(__file__).parent / "data"
+
+
+@pytest.fixture
+def mini_ensemble_pdb() -> Path:
+    """Three NMR models (PDB MODEL 1-3) of residues 1-10 from PDB 2LJ5, chain A."""
+    return DATA_DIR / "mini_ensemble.pdb"
 
 
 @pytest.fixture

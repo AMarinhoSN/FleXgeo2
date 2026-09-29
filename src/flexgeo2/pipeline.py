@@ -14,6 +14,7 @@ from flexgeo2.models import (
 )
 from flexgeo2.outputs import OutputWriter
 from flexgeo2.plotting import PlotStyle
+from flexgeo2.validation import validate_against_structure, validate_config
 
 
 class FlexGeo2App:
@@ -35,14 +36,28 @@ class FlexGeo2App:
         self.geometry.ensure_dependencies()
         PlotStyle.apply()
 
-        if config.reference and config.reference.pdb_model_id and not config.reference.pdb_file:
-            raise ValueError("--reference-pdb-model requires --reference-pdb.")
-
+        validate_config(config)
         pdb_file = Path(config.pdb_file).resolve()
-        if not pdb_file.is_file():
-            raise FileNotFoundError(f"Input PDB file not found: {pdb_file}")
 
-        raw_df = self.geometry.load_structure(pdb_file, n_jobs=config.n_jobs)
+        # Parse structures up front so chain, model and range mistakes are reported
+        # before the expensive Melodia computation.
+        structure = self.geometry.parse_structure(pdb_file)
+        reference_structure = None
+        if config.reference is not None and config.reference.pdb_file is not None:
+            reference_structure = self.geometry.parse_structure(
+                Path(config.reference.pdb_file).resolve()
+            )
+        validate_against_structure(
+            config,
+            self.geometry.describe_structure(structure),
+            (
+                self.geometry.describe_structure(reference_structure)
+                if reference_structure is not None
+                else None
+            ),
+        )
+
+        raw_df = self.geometry.compute_geometry(structure, n_jobs=config.n_jobs)
         raw_df = self.geometry.filter_chains(raw_df, config.chains)
         raw_df = self.geometry.normalize(raw_df)
         residue_summary_df = self.geometry.summarize(
@@ -53,7 +68,7 @@ class FlexGeo2App:
             raw_df, residue_summary_df
         )
 
-        distance_result = self._build_distance_result(config, raw_df)
+        distance_result = self._build_distance_result(config, raw_df, reference_structure)
         residue_clustering = self._build_residue_clustering(config, raw_df)
         residue_range_clustering = self._build_residue_range_clustering(config, raw_df)
 
@@ -76,20 +91,18 @@ class FlexGeo2App:
         )
         return result
 
-    def _build_distance_result(self, config: AnalysisConfig, raw_df):
+    def _build_distance_result(self, config: AnalysisConfig, raw_df, reference_structure):
         if config.reference is None:
             return None
 
-        if config.reference.model_id:
+        if config.reference.model_id is not None:
             reference_rows, reference_model_label = self.distances.select_reference_rows(
                 raw_df, config.reference.model_id
             )
             reference_label = f"input model {reference_model_label}"
-        elif config.reference.pdb_file:
+        elif config.reference.pdb_file is not None:
             reference_pdb = Path(config.reference.pdb_file).resolve()
-            if not reference_pdb.is_file():
-                raise FileNotFoundError(f"Reference PDB file not found: {reference_pdb}")
-            reference_df = self.geometry.load_structure(reference_pdb, n_jobs=config.n_jobs)
+            reference_df = self.geometry.compute_geometry(reference_structure, n_jobs=config.n_jobs)
             reference_df = self.geometry.filter_chains(reference_df, config.chains)
             reference_df = self.geometry.normalize(reference_df)
             reference_rows, reference_model_label = self.distances.select_reference_rows(

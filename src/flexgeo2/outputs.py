@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from flexgeo2.config import OutputConfig
+from flexgeo2.distances import DistanceService
 from flexgeo2.models import AnalysisResult, OutputArtifacts
 from flexgeo2.plotting import (
     ChainGeometryPlotter,
@@ -37,10 +38,7 @@ class OutputWriter:
 
     @staticmethod
     def write_distance_matrix_csv(distance_long_df, output_path: str | Path) -> None:
-        matrix_df = distance_long_df.pivot(
-            index="model", columns="residue_label", values="distance_to_reference"
-        ).sort_index()
-        matrix_df.to_csv(output_path)
+        DistanceService.to_matrix(distance_long_df).to_csv(output_path)
 
     def write(self, result: AnalysisResult, max_models_in_plot: int, hide_model_traces: bool):
         if not self.config.write_files:
@@ -119,7 +117,13 @@ class OutputWriter:
         result.raw_df.to_csv(artifacts.raw_csv, index=False)
         result.residue_summary_df.to_csv(artifacts.residue_summary_csv, index=False)
         result.overall_model_summary_df.to_csv(artifacts.overall_model_summary_csv, index=False)
-        self.overview_plotter.plot(result.residue_summary_df, artifacts.overview_plot)
+        self.overview_plotter.plot(
+            result.residue_summary_df,
+            artifacts.overview_plot,
+            raw_df=result.raw_df,
+            show_model_traces=not hide_model_traces,
+            max_models_in_plot=max_models_in_plot,
+        )
 
         if artifacts.model_summary_csv is not None:
             result.model_summary_df.to_csv(artifacts.model_summary_csv, index=False)

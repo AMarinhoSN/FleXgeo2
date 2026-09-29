@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from flexgeo2.cli.main import build_config, build_parser
+from flexgeo2.cli.main import build_config, build_parser, main, parse_args
+from flexgeo2.geometry import GeometryService
 
 
 def test_build_config_maps_cli_flags() -> None:
@@ -66,3 +67,63 @@ def test_parser_rejects_invalid_dmax_outlier_fraction(value: str) -> None:
 
     with pytest.raises(SystemExit):
         parser.parse_args(["ensemble.pdb", "--dmax-outlier-fraction", value])
+
+
+def test_parser_rejects_reference_pdb_model_without_reference_pdb(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        parse_args(build_parser(), ["ensemble.pdb", "--reference-pdb-model", "2"])
+
+    assert excinfo.value.code == 2
+    assert "--reference-pdb-model requires --reference-pdb" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--cluster-min-size", "1"],
+        ["--cluster-min-samples", "0"],
+        ["--max-models-in-plot", "-1"],
+        ["--n-jobs", "0"],
+        ["--n-jobs", "-2"],
+    ],
+)
+def test_parser_rejects_invalid_integer_options(arguments: list[str]) -> None:
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["ensemble.pdb", *arguments])
+
+
+def test_main_reports_missing_input_without_traceback(tmp_path: Path, capsys) -> None:
+    exit_code = main([str(tmp_path / "missing.pdb"), "--output-dir", str(tmp_path / "out")])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert captured.err.startswith("flexgeo2: error: Input PDB file not found")
+    assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        (["--reference-model", "0"], "Reference model '0' was not found"),
+        (["--chain", "Z"], "Chain(s) not found in the input: Z"),
+        (["--cluster-residue-range", "8-12"], "8-12 on chain 'A' is incomplete"),
+    ],
+)
+def test_main_validates_before_running_melodia(
+    monkeypatch: pytest.MonkeyPatch,
+    mini_ensemble_pdb: Path,
+    tmp_path: Path,
+    capsys,
+    arguments: list[str],
+    message: str,
+) -> None:
+    def fail_compute_geometry(*args, **kwargs):
+        raise AssertionError("Melodia should not run when the input is invalid.")
+
+    monkeypatch.setattr(GeometryService, "compute_geometry", fail_compute_geometry)
+
+    exit_code = main([str(mini_ensemble_pdb), "--output-dir", str(tmp_path / "out"), *arguments])
+
+    assert exit_code == 1
+    assert message in capsys.readouterr().err
+    assert not (tmp_path / "out").exists()

@@ -139,6 +139,8 @@ flexgeo2 path/to/ensemble.pdb \
   --reference-pdb-model 1
 ```
 
+`--reference-pdb-model` is only valid together with `--reference-pdb`.
+
 To cluster conformations independently for each residue:
 
 ```bash
@@ -209,7 +211,9 @@ Verbose mode adds:
 ## Notes
 
 - The prototype expects Melodia to return columns including `model`, `chain`, `order`, `name`, `curvature`, and `torsion`.
-- Residue positions are plotted using Melodia's `order` column.
+- Model identifiers are the PDB `MODEL` serial numbers (1-based), so `--reference-model 1` selects `MODEL 1`. Files without `MODEL` records are reported as model `1`.
+- Residue positions are plotted using Melodia's `order` column, which is the author residue number from the PDB file.
+- Chains, reference models and residue ranges are validated before Melodia runs, so input mistakes fail fast with a one-line error.
 - `residue_summary.csv` includes `dmax` plus the trimmed extrema used to compute it: `curvature_dmax_min`, `curvature_dmax_max`, `torsion_dmax_min`, and `torsion_dmax_max`.
 - `dmax` trims only sparse extreme histogram bins. The default threshold is `0.01`, meaning only extreme bins with less than 1% of a residue's observations are ignored.
 - The per-chain model summary includes mean absolute deviation from the ensemble mean, which is useful as a first-pass conformational variability signal.

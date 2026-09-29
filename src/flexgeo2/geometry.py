@@ -1,7 +1,16 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from pathlib import Path
+
+
+@dataclass(slots=True)
+class StructureInfo:
+    """Lightweight description of a parsed structure, used for early validation."""
+
+    model_ids: list[int]
+    residues_by_chain: dict[str, set[int]]
 
 
 class GeometryService:
@@ -23,10 +32,47 @@ class GeometryService:
                 "for example with: pip install -e ."
             ) from exc
 
-    def load_structure(self, pdb_file: str | Path, n_jobs: int = 1):
+    @staticmethod
+    def parse_structure(pdb_file: str | Path):
+        """Parse a PDB file with Biopython, without computing any geometry."""
+        from Bio.PDB import PDBParser
+
+        path = Path(pdb_file)
+        return PDBParser(QUIET=True).get_structure(path.stem, str(path))
+
+    @staticmethod
+    def model_serial_map(structure) -> dict[int, int]:
+        """Map Biopython's 0-based model index to the PDB MODEL serial number.
+
+        Files without MODEL records have a serial of 0; those fall back to index + 1 so
+        model identifiers are always 1-based, matching PDB conventions.
+        """
+        return {
+            int(model.id): int(model.serial_num) if model.serial_num else int(model.id) + 1
+            for model in structure
+        }
+
+    @classmethod
+    def describe_structure(cls, structure) -> StructureInfo:
+        """Summarise model identifiers and first-model residue numbers per chain."""
+        serial_map = cls.model_serial_map(structure)
+        residues_by_chain: dict[str, set[int]] = {}
+        first_model = next(iter(structure), None)
+        if first_model is not None:
+            for chain in first_model:
+                residues = {int(res.id[1]) for res in chain.get_residues() if res.id[0] == " "}
+                if residues:
+                    residues_by_chain[str(chain.id)] = residues
+        return StructureInfo(
+            model_ids=[serial_map[key] for key in sorted(serial_map)],
+            residues_by_chain=residues_by_chain,
+        )
+
+    def compute_geometry(self, structure, n_jobs: int = 1):
+        """Run Melodia on a parsed structure and report PDB MODEL serials as model IDs."""
         import melodia_py as mel
 
-        df = mel.geometry_from_structure_file(str(pdb_file), n_jobs=n_jobs)
+        df = mel.geometry_from_structure(structure, n_jobs=n_jobs)
         missing = self.required_columns.difference(df.columns)
         if missing:
             missing_csv = ", ".join(sorted(missing))
@@ -34,7 +80,12 @@ class GeometryService:
                 f"Melodia output is missing required columns: {missing_csv}. "
                 f"Available columns: {', '.join(df.columns)}"
             )
-        return df.copy()
+        df = df.copy()
+        df["model"] = df["model"].astype(int).map(self.model_serial_map(structure))
+        return df
+
+    def load_structure(self, pdb_file: str | Path, n_jobs: int = 1):
+        return self.compute_geometry(self.parse_structure(pdb_file), n_jobs=n_jobs)
 
     def filter_chains(self, df, chains: list[str] | None):
         if not chains:

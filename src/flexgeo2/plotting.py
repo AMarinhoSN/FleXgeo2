@@ -3,6 +3,8 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+from flexgeo2.distances import DistanceService
+
 
 def sanitize_chain_id(chain) -> str:
     if chain is None or chain == "":
@@ -42,6 +44,26 @@ class BasePlotter:
         axis.set_xticks(x_values[::tick_step])
         axis.set_xticklabels(residue_labels[::tick_step], rotation=45, ha="right")
 
+    @staticmethod
+    def plot_model_traces(curvature_axis, torsion_axis, chain_raw_df, max_models_in_plot) -> None:
+        model_ids = list(chain_raw_df["model"].drop_duplicates())[:max_models_in_plot]
+        for model_id in model_ids:
+            model_df = chain_raw_df[chain_raw_df["model"] == model_id]
+            curvature_axis.plot(
+                model_df["order"],
+                model_df["curvature"],
+                color="#4c78a8",
+                alpha=0.22,
+                linewidth=1,
+            )
+            torsion_axis.plot(
+                model_df["order"],
+                model_df["torsion"],
+                color="#e45756",
+                alpha=0.22,
+                linewidth=1,
+            )
+
 
 class ChainGeometryPlotter(BasePlotter):
     def plot(
@@ -62,23 +84,7 @@ class ChainGeometryPlotter(BasePlotter):
         title_suffix = f"Chain {chain_id}" if chain_id not in (None, "") else "Chain"
 
         if show_model_traces:
-            model_ids = list(chain_raw_df["model"].drop_duplicates())[:max_models_in_plot]
-            for model_id in model_ids:
-                model_df = chain_raw_df[chain_raw_df["model"] == model_id]
-                axes[0].plot(
-                    model_df["order"],
-                    model_df["curvature"],
-                    color="#4c78a8",
-                    alpha=0.22,
-                    linewidth=1,
-                )
-                axes[1].plot(
-                    model_df["order"],
-                    model_df["torsion"],
-                    color="#e45756",
-                    alpha=0.22,
-                    linewidth=1,
-                )
+            self.plot_model_traces(axes[0], axes[1], chain_raw_df, max_models_in_plot)
 
         axes[0].fill_between(
             x_values,
@@ -129,7 +135,32 @@ class ChainGeometryPlotter(BasePlotter):
 
 
 class OverviewPlotter(BasePlotter):
-    def plot(self, summary_df, output_path: str | Path) -> None:
+    def plot(
+        self,
+        summary_df,
+        output_path: str | Path,
+        raw_df=None,
+        show_model_traces: bool = True,
+        max_models_in_plot: int = 12,
+    ) -> None:
+        import matplotlib.pyplot as plt
+
+        fig = self.render(
+            summary_df,
+            raw_df=raw_df,
+            show_model_traces=show_model_traces,
+            max_models_in_plot=max_models_in_plot,
+        )
+        fig.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    def render(
+        self,
+        summary_df,
+        raw_df=None,
+        show_model_traces: bool = True,
+        max_models_in_plot: int = 12,
+    ):
         import matplotlib.pyplot as plt
 
         chains = list(summary_df["chain"].drop_duplicates())
@@ -148,6 +179,14 @@ class OverviewPlotter(BasePlotter):
             x_values = chain_df["order"].to_numpy()
             residue_labels = chain_df["residue_label"].tolist()
             title_suffix = f"Chain {chain}" if chain not in (None, "") else "Chain"
+
+            if show_model_traces and raw_df is not None:
+                self.plot_model_traces(
+                    row_axes[0],
+                    row_axes[1],
+                    raw_df[raw_df["chain"] == chain],
+                    max_models_in_plot,
+                )
 
             row_axes[0].plot(x_values, chain_df["curvature_mean"], color="#1f4e79", linewidth=2)
             row_axes[0].fill_between(
@@ -177,12 +216,18 @@ class OverviewPlotter(BasePlotter):
                 self.apply_residue_ticks(axis, x_values, residue_labels)
 
         fig.suptitle("Ensemble Overview", fontsize=16, fontweight="bold")
-        fig.savefig(output_path, dpi=300, bbox_inches="tight")
-        plt.close(fig)
+        return fig
 
 
 class DistanceHeatmapPlotter:
     def plot(self, distance_long_df, output_path: str | Path, title: str) -> None:
+        import matplotlib.pyplot as plt
+
+        fig = self.render(distance_long_df, title)
+        fig.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    def render(self, distance_long_df, title: str):
         import matplotlib.pyplot as plt
         import pandas as pd
 
@@ -199,9 +244,7 @@ class DistanceHeatmapPlotter:
 
         for axis, chain in zip(axes, chains, strict=False):
             chain_df = distance_long_df[distance_long_df["chain"] == chain].copy()
-            matrix = chain_df.pivot(
-                index="model", columns="residue_label", values="distance_to_reference"
-            ).sort_index()
+            matrix = DistanceService.to_matrix(chain_df)
             matrix = matrix.apply(pd.to_numeric, errors="coerce")
             if matrix.empty or matrix.isna().all().all():
                 raise ValueError(
@@ -222,6 +265,7 @@ class DistanceHeatmapPlotter:
                 if chain not in (None, "")
                 else "Chain: Distance to reference"
             )
+            axis.grid(False)
             axis.set_xlabel("Conformation")
             axis.set_ylabel("Residue")
 
@@ -246,8 +290,7 @@ class DistanceHeatmapPlotter:
             fig.colorbar(image, ax=axis, fraction=0.024, pad=0.02, label="Euclidean distance")
 
         fig.suptitle(title, fontsize=16, fontweight="bold")
-        fig.savefig(output_path, dpi=300, bbox_inches="tight")
-        plt.close(fig)
+        return fig
 
 
 class ResidueClusterPlotter:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import sys
 from pathlib import Path
 
 from flexgeo2.config import AnalysisConfig, ClusteringConfig, OutputConfig, ReferenceConfig
@@ -18,12 +19,36 @@ def fraction_in_unit_interval(value: str) -> float:
     return fraction
 
 
+def int_at_least(minimum: int):
+    def parse(value: str) -> int:
+        try:
+            number = int(value)
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"must be an integer >= {minimum}.") from exc
+        if number < minimum:
+            raise argparse.ArgumentTypeError(f"must be an integer >= {minimum}.")
+        return number
+
+    return parse
+
+
+def n_jobs_value(value: str) -> int:
+    try:
+        number = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be a positive integer or -1.") from exc
+    if number == 0 or number < -1:
+        raise argparse.ArgumentTypeError("must be a positive integer or -1.")
+    return number
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
+        prog="flexgeo2",
         description=(
             "Compute Melodia differential geometry descriptors from a PDB file "
             "and generate ensemble-aware curvature and torsion outputs."
-        )
+        ),
     )
     parser.add_argument("pdb_file", type=Path, help="Input PDB file.")
     parser.add_argument(
@@ -40,13 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--n-jobs",
-        type=int,
+        type=n_jobs_value,
         default=1,
-        help="Number of workers passed to Melodia for multi-model files.",
+        help="Number of workers passed to Melodia for multi-model files (-1 = all CPUs).",
     )
     parser.add_argument(
         "--max-models-in-plot",
-        type=int,
+        type=int_at_least(0),
         default=12,
         help="Maximum number of individual model traces to overlay per chain plot.",
     )
@@ -68,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
     reference_group.add_argument(
         "--reference-model",
         help=(
-            "Model identifier from the input ensemble to use as the reference state "
+            "PDB MODEL number from the input ensemble to use as the reference state "
             "for curvature/torsion distance calculations."
         ),
     )
@@ -80,8 +105,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--reference-pdb-model",
         help=(
-            "Model identifier to use from --reference-pdb. Defaults to the first model "
-            "found in that file."
+            "PDB MODEL number to use from --reference-pdb. Defaults to the first model "
+            "found in that file. Requires --reference-pdb."
         ),
     )
     parser.add_argument(
@@ -91,13 +116,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--cluster-min-size",
-        type=int,
+        type=int_at_least(2),
         default=5,
         help="Minimum cluster size passed to HDBSCAN. Default: 5",
     )
     parser.add_argument(
         "--cluster-min-samples",
-        type=int,
+        type=int_at_least(1),
         default=None,
         help="Optional min_samples value passed to HDBSCAN.",
     )
@@ -189,13 +214,27 @@ def print_run_summary(result) -> None:
         print(f"Per-chain outputs: {outputs.chains_dir}")
 
 
-def main() -> None:
+def parse_args(parser: argparse.ArgumentParser, argv: list[str] | None = None):
+    args = parser.parse_args(argv)
+    if args.reference_pdb_model is not None and args.reference_pdb is None:
+        parser.error("--reference-pdb-model requires --reference-pdb.")
+    return args
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args()
-    app = FlexGeo2App()
-    result = app.run(build_config(args))
+    args = parse_args(parser, argv)
+    try:
+        result = FlexGeo2App().run(build_config(args))
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"{parser.prog}: error: {exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print(f"{parser.prog}: interrupted", file=sys.stderr)
+        return 130
     print_run_summary(result)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

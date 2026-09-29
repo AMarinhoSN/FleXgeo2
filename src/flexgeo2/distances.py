@@ -19,6 +19,23 @@ class DistanceService:
             )
         return selected, str(model_id)
 
+    @staticmethod
+    def to_matrix(distance_long_df):
+        """Pivot one chain's distances to a models x residues matrix in sequence order.
+
+        Pivoting on ``order`` (not ``residue_label``) keeps residues in chain order; the
+        columns are relabelled with residue labels afterwards.
+        """
+        matrix = (
+            distance_long_df.pivot(index="model", columns="order", values="distance_to_reference")
+            .sort_index()
+            .sort_index(axis=1)
+        )
+        labels = distance_long_df.drop_duplicates("order").set_index("order")["residue_label"]
+        matrix.columns = [labels[order] for order in matrix.columns]
+        matrix.columns.name = "residue_label"
+        return matrix
+
     def compute(self, raw_df, reference_df, reference_label: str):
         comparison = raw_df.merge(
             reference_df[["chain", "order", "residue_label", "curvature", "torsion"]].rename(
