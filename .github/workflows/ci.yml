@@ -5,8 +5,8 @@ on:
   pull_request:
 
 jobs:
-  test:
-    name: Tests and lint
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
 
     steps:
@@ -21,16 +21,54 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: uv sync --extra test --locked
-
-      - name: Run tests
-        run: uv run --extra test pytest -q
 
       - name: Run Ruff lint
         run: uv run --extra test ruff check .
 
       - name: Check Ruff formatting
         run: uv run --extra test ruff format --check .
+
+  test:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          # macOS uses Apple Accelerate BLAS, where the PCA warning test is meaningful.
+          - os: macos-latest
+            python-version: "3.13"
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: uv sync --extra test --locked
+
+      - name: Run tests with coverage
+        run: uv run --extra test pytest -q --cov --cov-report=term
+
+      - name: Add coverage report to job summary
+        if: always() && matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
+        run: |
+          echo "## Coverage (Ubuntu, Python ${{ matrix.python-version }})" >> "$GITHUB_STEP_SUMMARY"
+          uv run --extra test coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
