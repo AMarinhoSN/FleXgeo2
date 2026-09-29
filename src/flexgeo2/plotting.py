@@ -231,28 +231,31 @@ class DistanceHeatmapPlotter:
         import matplotlib.pyplot as plt
         import pandas as pd
 
-        chains = list(distance_long_df["chain"].drop_duplicates())
-        fig, axes = plt.subplots(
-            nrows=len(chains),
-            ncols=1,
-            figsize=(14, max(4, 3.8 * len(chains))),
-            constrained_layout=True,
-        )
-
-        if len(chains) == 1:
-            axes = [axes]
-
-        for axis, chain in zip(axes, chains, strict=False):
-            chain_df = distance_long_df[distance_long_df["chain"] == chain].copy()
-            matrix = DistanceService.to_matrix(chain_df)
-            matrix = matrix.apply(pd.to_numeric, errors="coerce")
+        # Build and validate every chain's matrix before creating the figure, so an
+        # invalid input does not leave an open figure behind.
+        matrices = {}
+        for chain in distance_long_df["chain"].drop_duplicates():
+            chain_df = distance_long_df[distance_long_df["chain"] == chain]
+            matrix = DistanceService.to_matrix(chain_df).apply(pd.to_numeric, errors="coerce")
             if matrix.empty or matrix.isna().all().all():
                 raise ValueError(
                     f"Distance heatmap for chain '{chain}' is empty after alignment. "
                     "This usually means the chosen reference does not overlap with the "
                     "ensemble on chain/residue numbering."
                 )
+            matrices[chain] = matrix
 
+        fig, axes = plt.subplots(
+            nrows=len(matrices),
+            ncols=1,
+            figsize=(14, max(4, 3.8 * len(matrices))),
+            constrained_layout=True,
+        )
+
+        if len(matrices) == 1:
+            axes = [axes]
+
+        for axis, (chain, matrix) in zip(axes, matrices.items(), strict=True):
             image = axis.imshow(
                 matrix.to_numpy().T,
                 aspect="auto",
