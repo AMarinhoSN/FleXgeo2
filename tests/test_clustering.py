@@ -226,6 +226,31 @@ def test_cluster_residues_passes_hdbscan_parameters(monkeypatch: pytest.MonkeyPa
     assert created == [{"min_cluster_size": 7, "min_samples": 3}]
 
 
+@pytest.mark.parametrize(
+    "centers",
+    [
+        # Groups differ only in curvature.
+        {1: [(0.2, 0.3), (0.8, 0.3)]},
+        # Groups differ only in torsion.
+        {1: [(0.3, 0.2), (0.3, 0.8)]},
+    ],
+    ids=["curvature-only", "torsion-only"],
+)
+def test_cluster_residues_uses_curvature_and_torsion(centers: dict) -> None:
+    raw_df, expected_groups = _blob_frame(centers)
+
+    assignments_df, summary_df = ClusteringService().cluster_residues(
+        raw_df=raw_df,
+        min_cluster_size=5,
+        min_samples=None,
+    )
+
+    assert summary_df.iloc[0]["n_clusters"] == 2
+    _assert_labels_match_groups(
+        assignments_df["cluster"], assignments_df["model"].astype(str).map(expected_groups)
+    )
+
+
 def test_cluster_residue_ranges_recovers_window_signatures_with_hdbscan() -> None:
     raw_df, expected_groups = _blob_frame(
         {
