@@ -61,18 +61,18 @@ def test_cli_reference_model_uses_pdb_model_numbering(
     )
 
     assert exit_code == 0
-    long_df = pd.read_csv(output_dir / "distance_to_reference_long.csv")
+    long_df = pd.read_csv(output_dir / "reference" / "distances.csv")
     model_one = long_df[long_df["model"] == 1]
     assert model_one["distance_to_reference"].tolist() == pytest.approx([0.0] * 10)
     assert (long_df[long_df["model"] == 2]["distance_to_reference"] > 0).any()
 
-    matrix = pd.read_csv(output_dir / "distance_matrices" / "A_distance_matrix.csv", index_col=0)
+    matrix = pd.read_csv(output_dir / "reference" / "matrices" / "A.csv", index_col=0)
     orders = [int("".join(ch for ch in label if ch.isdigit())) for label in matrix.columns]
     assert orders == list(range(1, 11))
     assert matrix.index.tolist() == [1, 2, 3]
 
-    assert (output_dir / "plots" / "ensemble_overview.png").is_file()
-    assert (output_dir / "plots" / "distance_to_reference_heatmap.png").is_file()
+    assert (output_dir / "overview.png").is_file()
+    assert (output_dir / "reference" / "heatmap.png").is_file()
 
 
 def test_cli_reference_pdb_compares_against_external_model(
@@ -94,7 +94,7 @@ def test_cli_reference_pdb_compares_against_external_model(
     )
 
     assert exit_code == 0
-    long_df = pd.read_csv(output_dir / "distance_to_reference_long.csv")
+    long_df = pd.read_csv(output_dir / "reference" / "distances.csv")
     assert set(long_df["reference_label"]) == {"mini_ensemble.pdb model 2"}
     distances_by_model = long_df.groupby("model")["distance_to_reference"].max()
     assert distances_by_model.loc[2] == pytest.approx(0.0)
@@ -119,14 +119,14 @@ def test_cli_runs_both_clustering_modes(mini_ensemble_pdb: Path, tmp_path: Path)
     )
 
     assert exit_code == 0
-    residue_summary = pd.read_csv(output_dir / "residue_cluster_summary.csv")
+    residue_summary = pd.read_csv(output_dir / "clusters" / "residues.csv")
     assert residue_summary["order"].tolist() == list(range(1, 11))
     assert set(residue_summary["n_conformations"]) == {3}
     assert residue_summary["noise_fraction"].between(0.0, 1.0).all()
-    assert len(list((output_dir / "cluster_plots").glob("A_*_clusters.png"))) == 10
+    assert len(list((output_dir / "clusters" / "residue_plots").glob("A_*.png"))) == 10
 
-    range_summary = pd.read_csv(output_dir / "residue_range_cluster_summary.csv")
+    range_summary = pd.read_csv(output_dir / "range_clusters" / "ranges.csv")
     assert range_summary[["chain", "range_label", "n_residues", "n_conformations"]].to_dict(
         "records"
     ) == [{"chain": "A", "range_label": "2-5", "n_residues": 4, "n_conformations": 3}]
-    assert (output_dir / "range_cluster_plots" / "A_2-5_clusters.png").is_file()
+    assert (output_dir / "range_clusters" / "A_2-5.png").is_file()

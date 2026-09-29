@@ -96,7 +96,7 @@ artifacts = writer.write(
 )
 ```
 
-By default, `FleXgeo2` writes a lean set of top-level summary files and plots. Use `--output-verbose` when you want detailed intermediate tables, matrix exports, and duplicated per-chain output folders.
+By default, `FleXgeo2` writes a lean set of summary tables and plots, organised in one folder per analysis (see the output layout below). Use `--output-verbose` when you want detailed intermediate tables, matrix exports, and per-chain output folders.
 
 Optional outputs:
 
@@ -171,40 +171,37 @@ flexgeo2 path/to/ensemble.pdb \
   --cluster-residue-range 90-99
 ```
 
-Default outputs are written to the chosen directory:
+Outputs are organised with one folder per analysis. Folders for optional analyses are
+only created when that analysis runs. By default the output directory contains:
 
-- `geometry_descriptors.csv`
-- `residue_summary.csv`
-- `model_summary_overall.csv`
-- `distance_to_reference_summary.csv`
-- `residue_cluster_summary.csv`
-- `cluster_plots/<chain>_<residue>_clusters.png`
-- `residue_range_cluster_summary.csv`
-- `range_cluster_plots/<chain>_<start-end>_clusters.png`
-- `plots/ensemble_overview.png`
-- `plots/distance_to_reference_heatmap.png`
+```
+results/
+├── overview.png                 # curvature and torsion along the sequence
+├── geometry/
+│   ├── descriptors.csv          # per model and residue: curvature, torsion, ...
+│   ├── residues.csv             # per residue: mean, SD, range and dmax
+│   └── models.csv               # per model: deviation from the ensemble mean
+├── reference/                   # with --reference-model or --reference-pdb
+│   ├── residues.csv             # per residue: distance to the reference
+│   └── heatmap.png
+├── clusters/                    # with --cluster-residues
+│   ├── residues.csv             # per residue: number of clusters, noise fraction
+│   └── residue_plots/<chain>_<residue number>_<name>.png
+└── range_clusters/              # with --cluster-residue-range
+    ├── ranges.csv               # per range: number of clusters, noise fraction
+    └── <chain>_<start-end>.png
+```
 
-Verbose mode adds:
+`--output-verbose` adds:
 
-- `model_summary_by_chain.csv`
-- `distance_to_reference_long.csv`
-- `distance_matrices/<chain>_distance_matrix.csv`
-- `residue_cluster_assignments.csv`
-- `residue_range_cluster_assignments.csv`
-- `chains/<chain>/geometry_descriptors.csv`
-- `chains/<chain>/residue_summary.csv`
-- `chains/<chain>/model_summary.csv`
-- `chains/<chain>/curvature_torsion.png`
-- `chains/<chain>/distance_to_reference_long.csv`
-- `chains/<chain>/distance_to_reference_summary.csv`
-- `chains/<chain>/distance_to_reference_matrix.csv`
-- `chains/<chain>/distance_to_reference_heatmap.png`
-- `chains/<chain>/residue_cluster_assignments.csv`
-- `chains/<chain>/residue_cluster_summary.csv`
-- `chains/<chain>/cluster_plots/<residue>_clusters.png`
-- `chains/<chain>/residue_range_cluster_assignments.csv`
-- `chains/<chain>/residue_range_cluster_summary.csv`
-- `chains/<chain>/range_cluster_plots/<start-end>_clusters.png`
+- `geometry/models_by_chain.csv`
+- `reference/distances.csv` (per model and residue) and `reference/matrices/<chain>.csv`
+- `clusters/assignments.csv` and `range_clusters/assignments.csv` (cluster label of
+  every model)
+- `chains/<chain>/`, repeating the same layout for each chain
+
+Residue plot names start with the zero-padded residue number
+(e.g. `A_0045_ALA.png`), so they sort in sequence order.
 
 ---
 
@@ -214,7 +211,7 @@ Verbose mode adds:
 - Model identifiers are the PDB `MODEL` serial numbers (1-based), so `--reference-model 1` selects `MODEL 1`. Files without `MODEL` records are reported as model `1`.
 - Residue positions are plotted using Melodia's `order` column, which is the author residue number from the PDB file.
 - Chains, reference models and residue ranges are validated before Melodia runs, so input mistakes fail fast with a one-line error.
-- `residue_summary.csv` includes `dmax` plus the trimmed extrema used to compute it: `curvature_dmax_min`, `curvature_dmax_max`, `torsion_dmax_min`, and `torsion_dmax_max`.
+- `geometry/residues.csv` includes `dmax` plus the trimmed extrema used to compute it: `curvature_dmax_min`, `curvature_dmax_max`, `torsion_dmax_min`, and `torsion_dmax_max`.
 - `dmax` trims only sparse extreme histogram bins. The default threshold is `0.01`, meaning only extreme bins with less than 1% of a residue's observations are ignored.
 - The per-chain model summary includes mean absolute deviation from the ensemble mean, which is useful as a first-pass conformational variability signal.
 - Distance matrices use rows for ensemble models and columns for residues, with each cell storing the Euclidean distance to the chosen reference in `(curvature, torsion)` space.

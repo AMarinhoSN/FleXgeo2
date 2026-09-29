@@ -141,64 +141,64 @@ def artifact_paths(artifacts: OutputArtifacts) -> dict[str, Path]:
 
 
 BASE_FILES = {
-    "geometry_descriptors.csv",
-    "residue_summary.csv",
-    "model_summary_overall.csv",
-    "plots/ensemble_overview.png",
+    "overview.png",
+    "geometry/descriptors.csv",
+    "geometry/residues.csv",
+    "geometry/models.csv",
 }
 
 FULL_DEFAULT_FILES = BASE_FILES | {
-    "distance_to_reference_summary.csv",
-    "plots/distance_to_reference_heatmap.png",
-    "residue_cluster_summary.csv",
-    "cluster_plots/A_ALA1_clusters.png",
-    "cluster_plots/A_GLY2_clusters.png",
-    "cluster_plots/B_GLY1_clusters.png",
-    "residue_range_cluster_summary.csv",
-    "range_cluster_plots/A_1-2_clusters.png",
+    "reference/residues.csv",
+    "reference/heatmap.png",
+    "clusters/residues.csv",
+    "clusters/residue_plots/A_0001_ALA.png",
+    "clusters/residue_plots/A_0002_GLY.png",
+    "clusters/residue_plots/B_0001_GLY.png",
+    "range_clusters/ranges.csv",
+    "range_clusters/A_1-2.png",
 }
 
 VERBOSE_CHAIN_A_FILES = {
-    "chains/A/geometry_descriptors.csv",
-    "chains/A/residue_summary.csv",
-    "chains/A/model_summary.csv",
-    "chains/A/curvature_torsion.png",
-    "chains/A/distance_to_reference_long.csv",
-    "chains/A/distance_to_reference_summary.csv",
-    "chains/A/distance_to_reference_matrix.csv",
-    "chains/A/distance_to_reference_heatmap.png",
-    "chains/A/residue_cluster_assignments.csv",
-    "chains/A/residue_cluster_summary.csv",
-    "chains/A/cluster_plots/ALA1_clusters.png",
-    "chains/A/cluster_plots/GLY2_clusters.png",
-    "chains/A/residue_range_cluster_assignments.csv",
-    "chains/A/residue_range_cluster_summary.csv",
-    "chains/A/range_cluster_plots/1-2_clusters.png",
+    "chains/A/overview.png",
+    "chains/A/geometry/descriptors.csv",
+    "chains/A/geometry/residues.csv",
+    "chains/A/geometry/models.csv",
+    "chains/A/reference/distances.csv",
+    "chains/A/reference/residues.csv",
+    "chains/A/reference/matrix.csv",
+    "chains/A/reference/heatmap.png",
+    "chains/A/clusters/assignments.csv",
+    "chains/A/clusters/residues.csv",
+    "chains/A/clusters/residue_plots/0001_ALA.png",
+    "chains/A/clusters/residue_plots/0002_GLY.png",
+    "chains/A/range_clusters/assignments.csv",
+    "chains/A/range_clusters/ranges.csv",
+    "chains/A/range_clusters/1-2.png",
 }
 
 VERBOSE_CHAIN_B_FILES = {
-    "chains/B/geometry_descriptors.csv",
-    "chains/B/residue_summary.csv",
-    "chains/B/model_summary.csv",
-    "chains/B/curvature_torsion.png",
-    "chains/B/distance_to_reference_long.csv",
-    "chains/B/distance_to_reference_summary.csv",
-    "chains/B/distance_to_reference_matrix.csv",
-    "chains/B/distance_to_reference_heatmap.png",
-    "chains/B/residue_cluster_assignments.csv",
-    "chains/B/residue_cluster_summary.csv",
-    "chains/B/cluster_plots/GLY1_clusters.png",
+    "chains/B/overview.png",
+    "chains/B/geometry/descriptors.csv",
+    "chains/B/geometry/residues.csv",
+    "chains/B/geometry/models.csv",
+    "chains/B/reference/distances.csv",
+    "chains/B/reference/residues.csv",
+    "chains/B/reference/matrix.csv",
+    "chains/B/reference/heatmap.png",
+    "chains/B/clusters/assignments.csv",
+    "chains/B/clusters/residues.csv",
+    "chains/B/clusters/residue_plots/0001_GLY.png",
 }
 
 FULL_VERBOSE_FILES = (
     FULL_DEFAULT_FILES
     | {
-        "model_summary_by_chain.csv",
-        "distance_to_reference_long.csv",
-        "distance_matrices/A_distance_matrix.csv",
-        "distance_matrices/B_distance_matrix.csv",
-        "residue_cluster_assignments.csv",
-        "residue_range_cluster_assignments.csv",
+        "geometry/models_by_chain.csv",
+        "reference/distances.csv",
+        "reference/matrices/A.csv",
+        "reference/matrices/B.csv",
+        "clusters/assignments.csv",
+        "range_clusters/assignments.csv",
     }
     | VERBOSE_CHAIN_A_FILES
     | VERBOSE_CHAIN_B_FILES
@@ -317,8 +317,8 @@ def test_chain_outputs_contain_only_that_chain(
     )
 
     for chain in ("A", "B"):
-        for csv_path in (tmp_path / "chains" / chain).glob("*.csv"):
-            if csv_path.name == "distance_to_reference_matrix.csv":
+        for csv_path in (tmp_path / "chains" / chain).rglob("*.csv"):
+            if csv_path.name == "matrix.csv":
                 continue
             chains = pd.read_csv(csv_path, dtype={"chain": str})["chain"].unique().tolist()
             assert chains == [chain], csv_path.name
@@ -381,4 +381,18 @@ def test_blank_chain_ids_use_unassigned_folder(
     )
 
     assert {path.name for path in (tmp_path / "chains").iterdir()} == {"A", "unassigned"}
-    assert (tmp_path / "chains" / "unassigned" / "geometry_descriptors.csv").is_file()
+    assert (tmp_path / "chains" / "unassigned" / "geometry" / "descriptors.csv").is_file()
+
+
+def test_residue_plot_names_sort_in_sequence_order() -> None:
+    orders = [1, 2, 10, 45, 100, 1000]
+    names = [
+        OutputWriter.residue_plot_name("A", order, "ALA", with_chain_prefix=True)
+        for order in orders
+    ]
+
+    assert sorted(names) == names
+    assert names[3] == "A_0045_ALA.png"
+    assert OutputWriter.residue_plot_name("", 7, "GLY", with_chain_prefix=True) == (
+        "unassigned_0007_GLY.png"
+    )
