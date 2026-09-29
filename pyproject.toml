@@ -40,6 +40,10 @@ include = ["flexgeo2*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+    # Floating-point warnings raised from FleXgeo2 code are bugs, not noise.
+    "error::RuntimeWarning:flexgeo2",
+]
 
 [tool.ruff]
 target-version = "py310"

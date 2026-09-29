@@ -33,6 +33,31 @@ def test_compute_pca_projection_returns_two_columns() -> None:
     assert projection[:, 1].tolist() == pytest.approx([0.0, 0.0, 0.0])
 
 
+@pytest.mark.filterwarnings("error")
+def test_compute_pca_projection_emits_no_floating_point_warnings() -> None:
+    # A 40 x 30 matrix made matmul raise spurious divide/overflow/invalid warnings with
+    # Apple Accelerate BLAS (numpy 2.2). On other BLAS builds this passes trivially.
+    matrix = np.random.default_rng(0).normal(size=(40, 30))
+
+    projection = ClusteringService.compute_pca_projection(matrix)
+
+    centered = matrix - matrix.mean(axis=0)
+    _, _, vh = np.linalg.svd(centered, full_matrices=False)
+    reference = np.column_stack(
+        [np.einsum("ij,j->i", centered, vh[0]), np.einsum("ij,j->i", centered, vh[1])]
+    )
+    assert projection == pytest.approx(reference)
+
+
+@pytest.mark.parametrize("bad_value", [np.nan, np.inf])
+def test_compute_pca_projection_rejects_non_finite_input(bad_value: float) -> None:
+    matrix = np.ones((5, 4))
+    matrix[2, 1] = bad_value
+
+    with pytest.raises(ValueError, match="requires finite"):
+        ClusteringService.compute_pca_projection(matrix)
+
+
 def test_cluster_residues_marks_small_groups_as_noise(
     monkeypatch: pytest.MonkeyPatch,
     normalized_geometry_df: pd.DataFrame,

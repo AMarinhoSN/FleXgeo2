@@ -29,18 +29,24 @@ class ClusteringService:
     def compute_pca_projection(matrix):
         import numpy as np
 
+        if not np.isfinite(matrix).all():
+            raise ValueError("PCA projection requires finite curvature/torsion values.")
+
         centered = matrix - matrix.mean(axis=0, keepdims=True)
         if centered.shape[0] < 2:
             return np.column_stack([centered[:, 0], np.zeros(centered.shape[0])])
 
         _, _, vh = np.linalg.svd(centered, full_matrices=False)
-        if vh.shape[0] == 1:
+        # With some BLAS builds (e.g. Apple Accelerate), matmul raises spurious
+        # divide/overflow/invalid flags for finite inputs and finite results. Silence
+        # them here and check the result explicitly instead.
+        with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
             pc1 = centered @ vh[0]
-            pc2 = np.zeros(centered.shape[0])
-        else:
-            pc1 = centered @ vh[0]
-            pc2 = centered @ vh[1]
-        return np.column_stack([pc1, pc2])
+            pc2 = centered @ vh[1] if vh.shape[0] > 1 else np.zeros(centered.shape[0])
+        projection = np.column_stack([pc1, pc2])
+        if not np.isfinite(projection).all():
+            raise ValueError("PCA projection produced non-finite coordinates.")
+        return projection
 
     def cluster_residues(self, raw_df, min_cluster_size: int, min_samples: int | None):
         import hdbscan
