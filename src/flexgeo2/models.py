@@ -30,7 +30,6 @@ class OutputArtifacts:
     model_summary_csv: Path | None = None
     overall_model_summary_csv: Path | None = None
     overview_plot: Path | None = None
-    chains_dir: Path | None = None
     distance_long_csv: Path | None = None
     distance_summary_csv: Path | None = None
     distance_heatmap: Path | None = None

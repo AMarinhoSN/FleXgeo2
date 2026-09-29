@@ -37,7 +37,6 @@ def plotters() -> dict[str, RecordingPlotter]:
         name: RecordingPlotter()
         for name in (
             "overview_plotter",
-            "chain_plotter",
             "distance_plotter",
             "residue_cluster_plotter",
             "residue_range_cluster_plotter",
@@ -148,61 +147,24 @@ BASE_FILES = {
 }
 
 FULL_DEFAULT_FILES = BASE_FILES | {
+    "reference/distances.csv",
     "reference/residues.csv",
     "reference/heatmap.png",
+    "clusters/assignments.csv",
     "clusters/residues.csv",
     "clusters/residue_plots/A_0001_ALA.png",
     "clusters/residue_plots/A_0002_GLY.png",
     "clusters/residue_plots/B_0001_GLY.png",
+    "range_clusters/assignments.csv",
     "range_clusters/ranges.csv",
     "range_clusters/A_1-2.png",
 }
 
-VERBOSE_CHAIN_A_FILES = {
-    "chains/A/overview.png",
-    "chains/A/geometry/descriptors.csv",
-    "chains/A/geometry/residues.csv",
-    "chains/A/geometry/models.csv",
-    "chains/A/reference/distances.csv",
-    "chains/A/reference/residues.csv",
-    "chains/A/reference/matrix.csv",
-    "chains/A/reference/heatmap.png",
-    "chains/A/clusters/assignments.csv",
-    "chains/A/clusters/residues.csv",
-    "chains/A/clusters/residue_plots/0001_ALA.png",
-    "chains/A/clusters/residue_plots/0002_GLY.png",
-    "chains/A/range_clusters/assignments.csv",
-    "chains/A/range_clusters/ranges.csv",
-    "chains/A/range_clusters/1-2.png",
+FULL_VERBOSE_FILES = FULL_DEFAULT_FILES | {
+    "geometry/models_by_chain.csv",
+    "reference/matrices/A.csv",
+    "reference/matrices/B.csv",
 }
-
-VERBOSE_CHAIN_B_FILES = {
-    "chains/B/overview.png",
-    "chains/B/geometry/descriptors.csv",
-    "chains/B/geometry/residues.csv",
-    "chains/B/geometry/models.csv",
-    "chains/B/reference/distances.csv",
-    "chains/B/reference/residues.csv",
-    "chains/B/reference/matrix.csv",
-    "chains/B/reference/heatmap.png",
-    "chains/B/clusters/assignments.csv",
-    "chains/B/clusters/residues.csv",
-    "chains/B/clusters/residue_plots/0001_GLY.png",
-}
-
-FULL_VERBOSE_FILES = (
-    FULL_DEFAULT_FILES
-    | {
-        "geometry/models_by_chain.csv",
-        "reference/distances.csv",
-        "reference/matrices/A.csv",
-        "reference/matrices/B.csv",
-        "clusters/assignments.csv",
-        "range_clusters/assignments.csv",
-    }
-    | VERBOSE_CHAIN_A_FILES
-    | VERBOSE_CHAIN_B_FILES
-)
 
 
 def test_write_files_disabled_writes_nothing(
@@ -250,13 +212,8 @@ def test_default_mode_with_all_analyses(
     )
 
     assert written_files(tmp_path) == FULL_DEFAULT_FILES
-    assert artifacts.chains_dir is None
     assert artifacts.model_summary_csv is None
-    assert artifacts.distance_long_csv is None
     assert artifacts.distance_matrix_dir is None
-    assert artifacts.cluster_assignments_csv is None
-    assert artifacts.range_cluster_assignments_csv is None
-    assert not plotters["chain_plotter"].calls
 
 
 def test_verbose_mode_with_all_analyses(
@@ -267,7 +224,7 @@ def test_verbose_mode_with_all_analyses(
     )
 
     assert written_files(tmp_path) == FULL_VERBOSE_FILES
-    assert artifacts.chains_dir == tmp_path.resolve() / "chains"
+    assert artifacts.distance_matrix_dir == tmp_path.resolve() / "reference" / "matrices"
 
 
 @pytest.mark.parametrize("verbose", [False, True])
@@ -297,7 +254,12 @@ def test_csv_outputs_round_trip(
         artifacts.overall_model_summary_csv: full_result.overall_model_summary_df,
         artifacts.distance_long_csv: full_result.distance_result.long_df,
         artifacts.distance_summary_csv: full_result.distance_result.summary_df,
+        artifacts.cluster_assignments_csv: full_result.residue_clustering.assignments_df,
         artifacts.cluster_summary_csv: full_result.residue_clustering.summary_df,
+        artifacts.range_cluster_assignments_csv: (
+            full_result.residue_range_clustering.assignments_df
+        ),
+        artifacts.range_cluster_summary_csv: full_result.residue_range_clustering.summary_df,
     }
     for path, expected in expected_tables.items():
         written = pd.read_csv(path, dtype={"model": str, "chain": str})
@@ -309,33 +271,32 @@ def test_csv_outputs_round_trip(
         )
 
 
-def test_chain_outputs_contain_only_that_chain(
+def test_distance_matrices_are_split_by_chain(
     tmp_path: Path, plotters: dict, full_result: AnalysisResult
 ) -> None:
-    make_writer(tmp_path, plotters, verbose=True).write(
+    artifacts = make_writer(tmp_path, plotters, verbose=True).write(
         full_result, max_models_in_plot=12, hide_model_traces=False
     )
 
-    for chain in ("A", "B"):
-        for csv_path in (tmp_path / "chains" / chain).rglob("*.csv"):
-            if csv_path.name == "matrix.csv":
-                continue
-            chains = pd.read_csv(csv_path, dtype={"chain": str})["chain"].unique().tolist()
-            assert chains == [chain], csv_path.name
+    matrix_a = pd.read_csv(artifacts.distance_matrix_dir / "A.csv", index_col="model")
+    matrix_b = pd.read_csv(artifacts.distance_matrix_dir / "B.csv", index_col="model")
+    assert matrix_a.columns.tolist() == ["ALA1", "GLY2"]
+    assert matrix_b.columns.tolist() == ["GLY1"]
+    assert matrix_a.index.tolist() == matrix_b.index.tolist() == [1, 2]
 
 
 @pytest.mark.parametrize(
     ("hide_model_traces", "max_models"),
     [(False, 7), (True, 3)],
 )
-def test_trace_options_reach_overview_and_chain_plots(
+def test_trace_options_reach_overview_plot(
     tmp_path: Path,
     plotters: dict,
     base_result: AnalysisResult,
     hide_model_traces: bool,
     max_models: int,
 ) -> None:
-    make_writer(tmp_path, plotters, verbose=True).write(
+    make_writer(tmp_path, plotters).write(
         base_result, max_models_in_plot=max_models, hide_model_traces=hide_model_traces
     )
 
@@ -343,12 +304,6 @@ def test_trace_options_reach_overview_and_chain_plots(
     assert overview_call["kwargs"]["show_model_traces"] is (not hide_model_traces)
     assert overview_call["kwargs"]["max_models_in_plot"] == max_models
     pd.testing.assert_frame_equal(overview_call["kwargs"]["raw_df"], base_result.raw_df)
-
-    chain_calls = plotters["chain_plotter"].calls
-    assert len(chain_calls) == 2
-    for call in chain_calls:
-        assert call["kwargs"]["show_model_traces"] is (not hide_model_traces)
-        assert call["kwargs"]["max_models_in_plot"] == max_models
 
 
 def test_distance_heatmap_title_names_reference(
@@ -359,40 +314,36 @@ def test_distance_heatmap_title_names_reference(
     )
 
     titles = [call["args"][2] for call in plotters["distance_plotter"].calls]
-    assert titles == [
-        "Distance to reference: input model 1",
-        "Chain A: distance to input model 1",
-        "Chain B: distance to input model 1",
-    ]
+    assert titles == ["Distance to reference: input model 1"]
 
 
-def test_blank_chain_ids_use_unassigned_folder(
-    tmp_path: Path, plotters: dict, base_result: AnalysisResult
+def test_blank_chain_ids_use_unassigned_in_file_names(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
 ) -> None:
-    for frame in (
-        base_result.raw_df,
-        base_result.residue_summary_df,
-        base_result.model_summary_df,
-    ):
+    frames = [
+        full_result.raw_df,
+        full_result.residue_summary_df,
+        full_result.model_summary_df,
+        full_result.distance_result.long_df,
+        full_result.distance_result.summary_df,
+        full_result.residue_clustering.assignments_df,
+        full_result.residue_clustering.summary_df,
+    ]
+    for frame in frames:
         frame.loc[frame["chain"] == "B", "chain"] = ""
 
     make_writer(tmp_path, plotters, verbose=True).write(
-        base_result, max_models_in_plot=12, hide_model_traces=False
+        full_result, max_models_in_plot=12, hide_model_traces=False
     )
 
-    assert {path.name for path in (tmp_path / "chains").iterdir()} == {"A", "unassigned"}
-    assert (tmp_path / "chains" / "unassigned" / "geometry" / "descriptors.csv").is_file()
+    assert (tmp_path / "reference" / "matrices" / "unassigned.csv").is_file()
+    assert (tmp_path / "clusters" / "residue_plots" / "unassigned_0001_GLY.png").is_file()
 
 
 def test_residue_plot_names_sort_in_sequence_order() -> None:
     orders = [1, 2, 10, 45, 100, 1000]
-    names = [
-        OutputWriter.residue_plot_name("A", order, "ALA", with_chain_prefix=True)
-        for order in orders
-    ]
+    names = [OutputWriter.residue_plot_name("A", order, "ALA") for order in orders]
 
     assert sorted(names) == names
     assert names[3] == "A_0045_ALA.png"
-    assert OutputWriter.residue_plot_name("", 7, "GLY", with_chain_prefix=True) == (
-        "unassigned_0007_GLY.png"
-    )
+    assert OutputWriter.residue_plot_name("", 7, "GLY") == "unassigned_0007_GLY.png"

@@ -96,7 +96,7 @@ artifacts = writer.write(
 )
 ```
 
-By default, `FleXgeo2` writes a lean set of summary tables and plots, organised in one folder per analysis (see the output layout below). Use `--output-verbose` when you want detailed intermediate tables, matrix exports, and per-chain output folders.
+By default, `FleXgeo2` writes a lean set of summary tables and plots, organised in one folder per analysis (see the output layout below). Use `--output-verbose` to also write per-chain model summaries and distance matrices.
 
 Optional outputs:
 
@@ -107,7 +107,7 @@ flexgeo2 path/to/ensemble.pdb \
   --n-jobs -1
 ```
 
-To write the full detailed output set:
+To also write per-chain model summaries and distance matrices:
 
 ```bash
 flexgeo2 path/to/ensemble.pdb --output-verbose
@@ -182,23 +182,26 @@ results/
 │   ├── residues.csv             # per residue: mean, SD, range and dmax
 │   └── models.csv               # per model: deviation from the ensemble mean
 ├── reference/                   # with --reference-model or --reference-pdb
-│   ├── residues.csv             # per residue: distance to the reference
+│   ├── distances.csv            # per model and residue: distance to the reference
+│   ├── residues.csv             # per residue: distance statistics
 │   └── heatmap.png
 ├── clusters/                    # with --cluster-residues
+│   ├── assignments.csv          # per model and residue: cluster label, probability
 │   ├── residues.csv             # per residue: number of clusters, noise fraction
 │   └── residue_plots/<chain>_<residue number>_<name>.png
 └── range_clusters/              # with --cluster-residue-range
+    ├── assignments.csv          # per model and range: cluster label, PCA coordinates
     ├── ranges.csv               # per range: number of clusters, noise fraction
     └── <chain>_<start-end>.png
 ```
 
-`--output-verbose` adds:
+All tables are in long ("tidy") format with a `chain` column, so a single chain can be
+selected by filtering that column.
 
-- `geometry/models_by_chain.csv`
-- `reference/distances.csv` (per model and residue) and `reference/matrices/<chain>.csv`
-- `clusters/assignments.csv` and `range_clusters/assignments.csv` (cluster label of
-  every model)
-- `chains/<chain>/`, repeating the same layout for each chain
+`--output-verbose` adds two derived tables:
+
+- `geometry/models_by_chain.csv`: the per-model summary computed separately per chain
+- `reference/matrices/<chain>.csv`: distances as a models x residues matrix
 
 Residue plot names start with the zero-padded residue number
 (e.g. `A_0045_ALA.png`), so they sort in sequence order.

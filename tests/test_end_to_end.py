@@ -89,7 +89,6 @@ def test_cli_reference_pdb_compares_against_external_model(
             str(mini_ensemble_pdb),
             "--reference-pdb-model",
             "2",
-            "--output-verbose",
         ]
     )
 
@@ -125,8 +124,18 @@ def test_cli_runs_both_clustering_modes(mini_ensemble_pdb: Path, tmp_path: Path)
     assert residue_summary["noise_fraction"].between(0.0, 1.0).all()
     assert len(list((output_dir / "clusters" / "residue_plots").glob("A_*.png"))) == 10
 
+    # Per-model answers are written by default (no --output-verbose).
+    assignments = pd.read_csv(output_dir / "clusters" / "assignments.csv")
+    assert len(assignments) == 3 * 10
+    assert set(assignments["model"]) == {1, 2, 3}
+    assert {"chain", "order", "cluster", "cluster_probability"} <= set(assignments.columns)
+
     range_summary = pd.read_csv(output_dir / "range_clusters" / "ranges.csv")
     assert range_summary[["chain", "range_label", "n_residues", "n_conformations"]].to_dict(
         "records"
     ) == [{"chain": "A", "range_label": "2-5", "n_residues": 4, "n_conformations": 3}]
     assert (output_dir / "range_clusters" / "A_2-5.png").is_file()
+
+    range_assignments = pd.read_csv(output_dir / "range_clusters" / "assignments.csv")
+    assert range_assignments["model"].tolist() == [1, 2, 3]
+    assert set(range_assignments["range_label"]) == {"2-5"}

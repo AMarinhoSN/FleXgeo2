@@ -210,8 +210,6 @@ def print_run_summary(result) -> None:
         print(f"Residue-range cluster plots: {outputs.range_cluster_plots_dir}")
     if outputs.range_cluster_assignments_csv is not None:
         print(f"Residue-range cluster assignments: {outputs.range_cluster_assignments_csv}")
-    if outputs.chains_dir is not None:
-        print(f"Per-chain outputs: {outputs.chains_dir}")
 
 
 def parse_args(parser: argparse.ArgumentParser, argv: list[str] | None = None):
