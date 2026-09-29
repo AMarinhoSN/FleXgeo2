@@ -73,3 +73,60 @@ def test_cli_reference_model_uses_pdb_model_numbering(
 
     assert (output_dir / "plots" / "ensemble_overview.png").is_file()
     assert (output_dir / "plots" / "distance_to_reference_heatmap.png").is_file()
+
+
+def test_cli_reference_pdb_compares_against_external_model(
+    mini_ensemble_pdb: Path, tmp_path: Path
+) -> None:
+    output_dir = tmp_path / "out"
+
+    exit_code = main(
+        [
+            str(mini_ensemble_pdb),
+            "--output-dir",
+            str(output_dir),
+            "--reference-pdb",
+            str(mini_ensemble_pdb),
+            "--reference-pdb-model",
+            "2",
+            "--output-verbose",
+        ]
+    )
+
+    assert exit_code == 0
+    long_df = pd.read_csv(output_dir / "distance_to_reference_long.csv")
+    assert set(long_df["reference_label"]) == {"mini_ensemble.pdb model 2"}
+    distances_by_model = long_df.groupby("model")["distance_to_reference"].max()
+    assert distances_by_model.loc[2] == pytest.approx(0.0)
+    assert distances_by_model.loc[1] > 0.0
+    assert distances_by_model.loc[3] > 0.0
+
+
+def test_cli_runs_both_clustering_modes(mini_ensemble_pdb: Path, tmp_path: Path) -> None:
+    output_dir = tmp_path / "out"
+
+    exit_code = main(
+        [
+            str(mini_ensemble_pdb),
+            "--output-dir",
+            str(output_dir),
+            "--cluster-residues",
+            "--cluster-residue-range",
+            "2-5",
+            "--cluster-min-size",
+            "2",
+        ]
+    )
+
+    assert exit_code == 0
+    residue_summary = pd.read_csv(output_dir / "residue_cluster_summary.csv")
+    assert residue_summary["order"].tolist() == list(range(1, 11))
+    assert set(residue_summary["n_conformations"]) == {3}
+    assert residue_summary["noise_fraction"].between(0.0, 1.0).all()
+    assert len(list((output_dir / "cluster_plots").glob("A_*_clusters.png"))) == 10
+
+    range_summary = pd.read_csv(output_dir / "residue_range_cluster_summary.csv")
+    assert range_summary[["chain", "range_label", "n_residues", "n_conformations"]].to_dict(
+        "records"
+    ) == [{"chain": "A", "range_label": "2-5", "n_residues": 4, "n_conformations": 3}]
+    assert (output_dir / "range_cluster_plots" / "A_2-5_clusters.png").is_file()

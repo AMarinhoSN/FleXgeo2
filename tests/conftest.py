@@ -11,6 +11,16 @@ os.environ.setdefault("MPLBACKEND", "Agg")
 DATA_DIR = Path(__file__).parent / "data"
 
 
+@pytest.fixture(autouse=True)
+def _run_in_tmp_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run each test from its own temporary directory.
+
+    Relative default paths (e.g. OutputConfig's ``results``) then land in ``tmp_path``
+    instead of the directory pytest was launched from.
+    """
+    monkeypatch.chdir(tmp_path)
+
+
 @pytest.fixture
 def mini_ensemble_pdb() -> Path:
     """Three NMR models (PDB MODEL 1-3) of residues 1-10 from PDB 2LJ5, chain A."""
