@@ -12,6 +12,11 @@ two_state_switch.pdb
     A 15-residue alpha helix in which residue 8 flips to beta in the second half of
     the models. The flip swings the C-terminal half as a rigid body, so FleXgeo2
     should detect two states at the switch and no change far from it.
+
+three_state_switch.pdb
+    The same helix with residue 8 in one of three states: alpha (all helix), beta or
+    left-handed helix (alpha-L). Polyproline II was tried as the third state but sits
+    too close to alpha in curvature/torsion at the switch for robust clustering.
 """
 
 from __future__ import annotations
@@ -29,6 +34,7 @@ OMEGA = 180.0
 
 HELIX_PHI_PSI = (-60.0, -45.0)
 BETA_PHI_PSI = (-120.0, 130.0)
+ALPHA_L_PHI_PSI = (57.0, 47.0)
 
 TWO_STATE = {
     "n_residues": 15,
@@ -37,6 +43,7 @@ TWO_STATE = {
     "dihedral_noise_deg": 2.0,
     "seed": 0,
 }
+THREE_STATE = dict(TWO_STATE)
 
 
 def place_atom(a, b, c, bond: float, angle: float, torsion: float) -> np.ndarray:
@@ -90,11 +97,12 @@ def check_backbone(backbone: np.ndarray, phi=None, psi=None) -> None:
             assert np.isclose(dihedral(c[i], n[i + 1], ca[i + 1], c[i + 1]), phi[i + 1])
 
 
-def two_state_dihedrals(state: int, params: dict) -> tuple[np.ndarray, np.ndarray]:
+def switch_dihedrals(switch_phi_psi, params: dict) -> tuple[np.ndarray, np.ndarray]:
+    """All-helix dihedrals, with the switch residue set to ``switch_phi_psi`` if given."""
     phi = np.full(params["n_residues"], HELIX_PHI_PSI[0])
     psi = np.full(params["n_residues"], HELIX_PHI_PSI[1])
-    if state == 1:
-        phi[params["switch_residue"] - 1], psi[params["switch_residue"] - 1] = BETA_PHI_PSI
+    if switch_phi_psi is not None:
+        phi[params["switch_residue"] - 1], psi[params["switch_residue"] - 1] = switch_phi_psi
     return phi, psi
 
 
@@ -115,38 +123,56 @@ def pdb_lines(models: list[np.ndarray], remarks: dict) -> list[str]:
     return lines
 
 
-def generate_two_state(params: dict = TWO_STATE) -> list[str]:
-    for state in (0, 1):
-        ideal_phi, ideal_psi = two_state_dihedrals(state, params)
+def switch_ensemble(switches: list, params: dict) -> list[np.ndarray]:
+    """Models for each state in turn; ``switches`` holds each state's switch phi/psi."""
+    for switch_phi_psi in switches:
+        ideal_phi, ideal_psi = switch_dihedrals(switch_phi_psi, params)
         check_backbone(build_backbone(ideal_phi, ideal_psi), ideal_phi, ideal_psi)
 
     rng = np.random.default_rng(params["seed"])
     noise = params["dihedral_noise_deg"]
     models = []
-    for state in (0, 1):
+    for switch_phi_psi in switches:
         for _ in range(params["models_per_state"]):
-            phi, psi = two_state_dihedrals(state, params)
+            phi, psi = switch_dihedrals(switch_phi_psi, params)
             phi = phi + rng.normal(0.0, noise, params["n_residues"])
             psi = psi + rng.normal(0.0, noise, params["n_residues"])
             backbone = build_backbone(phi, psi)
             check_backbone(backbone, phi, psi)
             models.append(backbone)
+    return models
 
+
+def state_remarks(switches: list, params: dict) -> dict:
+    """REMARK entries: state_a is all helix; later states give their switch phi/psi."""
     per_state = params["models_per_state"]
-    remarks = {
-        **params,
-        "state_a_models": f"1-{per_state}",
-        "state_b_models": f"{per_state + 1}-{2 * per_state}",
-        "state_a_phi_psi": "{} {}".format(*HELIX_PHI_PSI),
-        "state_b_switch_phi_psi": "{} {}".format(*BETA_PHI_PSI),
-    }
-    return pdb_lines(models, remarks)
+    remarks = dict(params)
+    for index, letter in enumerate("abc"[: len(switches)]):
+        remarks[f"state_{letter}_models"] = f"{index * per_state + 1}-{(index + 1) * per_state}"
+    remarks["state_a_phi_psi"] = "{} {}".format(*HELIX_PHI_PSI)
+    for letter, switch_phi_psi in zip("bc", switches[1:], strict=False):
+        remarks[f"state_{letter}_switch_phi_psi"] = "{} {}".format(*switch_phi_psi)
+    return remarks
+
+
+def generate_two_state(params: dict = TWO_STATE) -> list[str]:
+    switches = [None, BETA_PHI_PSI]
+    return pdb_lines(switch_ensemble(switches, params), state_remarks(switches, params))
+
+
+def generate_three_state(params: dict = THREE_STATE) -> list[str]:
+    switches = [None, BETA_PHI_PSI, ALPHA_L_PHI_PSI]
+    return pdb_lines(switch_ensemble(switches, params), state_remarks(switches, params))
 
 
 def main() -> None:
-    output = DATA_DIR / "two_state_switch.pdb"
-    output.write_text("\n".join(generate_two_state()) + "\n")
-    print(f"Wrote {output}")
+    for name, generate in (
+        ("two_state_switch.pdb", generate_two_state),
+        ("three_state_switch.pdb", generate_three_state),
+    ):
+        output = DATA_DIR / name
+        output.write_text("\n".join(generate()) + "\n")
+        print(f"Wrote {output}")
 
 
 if __name__ == "__main__":
