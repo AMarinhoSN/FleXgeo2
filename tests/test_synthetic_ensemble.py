@@ -88,6 +88,18 @@ class SwitchEnsemble:
         raise KeyError(model)
 
     @property
+    def switch_windows(self) -> list[str]:
+        """Residue ranges containing the switch: tight, wider, and the whole chain."""
+        switch = self.switch_residue
+        return [f"{switch}-{switch + 1}", f"{switch - 2}-{switch + 3}", f"1-{self.n_residues}"]
+
+    @property
+    def far_windows(self) -> list[str]:
+        """Residue ranges covering the distant residues on either side of the switch."""
+        switch = self.switch_residue
+        return [f"1-{switch - 3}", f"{switch + 4}-{self.n_residues}"]
+
+    @property
     def distant_residues(self) -> tuple[int, ...]:
         """Residues at least three positions before or four after the switch."""
         return tuple(range(1, self.switch_residue - 2)) + tuple(
@@ -100,7 +112,11 @@ def analysed(request):
     ensemble = SwitchEnsemble.from_pdb(DATA_DIR / request.param)
     config = AnalysisConfig(
         pdb_file=ensemble.path,
-        clustering=ClusteringConfig(cluster_residues=True, min_cluster_size=MIN_CLUSTER_SIZE),
+        clustering=ClusteringConfig(
+            cluster_residues=True,
+            cluster_residue_ranges=ensemble.switch_windows + ensemble.far_windows,
+            min_cluster_size=MIN_CLUSTER_SIZE,
+        ),
         output=OutputConfig(write_files=False),
     )
     return ensemble, FlexGeo2App().run(config)
@@ -185,3 +201,51 @@ def test_descriptors_far_from_the_switch_are_state_independent(analysed) -> None
     assert switch_shift > 0.3
     assert distant_shift < 0.05
     assert distant_shift < switch_shift / 10
+
+
+# Range clustering, measured over 50 noise seeds for both fixtures: every window that
+# contains the switch (up to the whole chain) recovered all states exactly, and every
+# window away from it came out as pure noise.
+
+
+def range_assignments(result, window: str):
+    assignments = result.residue_range_clustering.assignments_df
+    window_df = assignments[assignments["range_label"] == window]
+    # Range assignments store model IDs as strings (see TODO.md).
+    return window_df.assign(model=window_df["model"].astype(int))
+
+
+def test_range_clustering_recovers_every_state_for_windows_covering_the_switch(
+    analysed,
+) -> None:
+    ensemble, result = analysed
+    summary = result.residue_range_clustering.summary_df.set_index("range_label")
+    n_states = len(ensemble.states)
+
+    for window in ensemble.switch_windows:
+        assert summary.loc[window, "n_clusters"] == n_states, window
+        assert summary.loc[window, "noise_fraction"] == 0.0, window
+
+        window_df = range_assignments(result, window)
+        labels_by_state = window_df.groupby(window_df["model"].map(ensemble.state_of))[
+            "cluster"
+        ].unique()
+        assert all(len(labels) == 1 for labels in labels_by_state), window
+        assert len({labels[0] for labels in labels_by_state}) == n_states, window
+
+
+def test_range_clustering_finds_no_states_far_from_the_switch(analysed) -> None:
+    ensemble, result = analysed
+    summary = result.residue_range_clustering.summary_df.set_index("range_label")
+
+    for window in ensemble.far_windows:
+        assert summary.loc[window, "n_clusters"] == 0, window
+        assert summary.loc[window, "noise_fraction"] == 1.0, window
+
+
+def test_range_pca_coordinates_are_finite(analysed) -> None:
+    ensemble, result = analysed
+
+    for window in ensemble.switch_windows + ensemble.far_windows:
+        window_df = range_assignments(result, window)
+        assert np.isfinite(window_df[["pc1", "pc2"]].to_numpy()).all(), window
