@@ -9,6 +9,7 @@ description = "FleXgeo2 prototype for protein backbone differential geometry ana
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "biopython>=1.80",
     "hdbscan>=0.8",
     "melodia-py",
     "matplotlib>=3.8",
