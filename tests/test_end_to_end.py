@@ -122,7 +122,9 @@ def test_cli_runs_both_clustering_modes(mini_ensemble_pdb: Path, tmp_path: Path)
     assert residue_summary["order"].tolist() == list(range(1, 11))
     assert set(residue_summary["n_conformations"]) == {3}
     assert residue_summary["noise_fraction"].between(0.0, 1.0).all()
-    assert len(list((output_dir / "clusters" / "residue_plots").glob("A_*.png"))) == 10
+    assert (output_dir / "clusters" / "clusters.png").is_file()
+    # Per-residue scatter plots are only written with --output-verbose.
+    assert not (output_dir / "clusters" / "residue_plots").exists()
 
     # Per-model answers are written by default (no --output-verbose).
     assignments = pd.read_csv(output_dir / "clusters" / "assignments.csv")

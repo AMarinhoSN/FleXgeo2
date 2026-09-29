@@ -12,6 +12,34 @@ def sanitize_chain_id(chain) -> str:
     return str(chain).replace("/", "_")
 
 
+NOISE_COLOR = "#9e9e9e"
+
+
+def cluster_palette() -> list[tuple[float, float, float]]:
+    """Cluster colours: tab10, then tab20's light shades. Greys are left out for noise."""
+    import matplotlib.pyplot as plt
+
+    tab10 = [color for index, color in enumerate(plt.get_cmap("tab10").colors) if index != 7]
+    light = [
+        color
+        for index, color in enumerate(plt.get_cmap("tab20").colors)
+        if index % 2 == 1 and index != 15
+    ]
+    return tab10 + light
+
+
+def cluster_color(label):
+    """Colour for a cluster label, the same in every plot; -1 (noise) is grey."""
+    if int(label) < 0:
+        return NOISE_COLOR
+    palette = cluster_palette()
+    return palette[int(label) % len(palette)]
+
+
+def cluster_legend_label(label) -> str:
+    return "Noise" if int(label) < 0 else f"Cluster {int(label)}"
+
+
 class PlotStyle:
     """Global matplotlib styling for FleXgeo2 plots."""
 
@@ -296,6 +324,89 @@ class DistanceHeatmapPlotter:
         return fig
 
 
+class ClusterMapPlotter(BasePlotter):
+    """Cluster label of every model at every residue, with clusters per residue above."""
+
+    MISSING_COLOR = "white"
+
+    def plot(self, summary_df, output_path: str | Path, assignments_df) -> None:
+        import matplotlib.pyplot as plt
+
+        fig = self.render(summary_df, assignments_df)
+        fig.savefig(output_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+
+    def render(self, summary_df, assignments_df):
+        import matplotlib.pyplot as plt
+        import numpy as np
+        from matplotlib.colors import to_rgba
+        from matplotlib.patches import Patch
+        from matplotlib.ticker import MaxNLocator
+
+        chains = list(summary_df["chain"].drop_duplicates())
+        models = list(assignments_df["model"].drop_duplicates())
+        map_height = min(6.0, max(2.0, 0.12 * len(models)))
+        fig = plt.figure(figsize=(14, len(chains) * (map_height + 1.6)), constrained_layout=True)
+        grid = fig.add_gridspec(
+            nrows=2 * len(chains), ncols=1, height_ratios=[1.2, map_height] * len(chains)
+        )
+
+        labels_shown: set[int] = set()
+        any_missing = False
+        for index, chain in enumerate(chains):
+            chain_summary = summary_df[summary_df["chain"] == chain].sort_values("order")
+            chain_assignments = assignments_df[assignments_df["chain"] == chain]
+            # Models x residues, in sequence order; NaN where a model lacks the residue.
+            labels = (
+                chain_assignments.pivot(index="model", columns="order", values="cluster")
+                .reindex(index=models, columns=chain_summary["order"])
+                .to_numpy(dtype=float)
+            )
+            image = np.empty(labels.shape + (4,))
+            image[:] = to_rgba(self.MISSING_COLOR)
+            for label in np.unique(labels[~np.isnan(labels)]):
+                image[labels == label] = to_rgba(cluster_color(label))
+                labels_shown.add(int(label))
+            any_missing = any_missing or bool(np.isnan(labels).any())
+
+            positions = np.arange(len(chain_summary))
+            strip_axis = fig.add_subplot(grid[2 * index])
+            map_axis = fig.add_subplot(grid[2 * index + 1], sharex=strip_axis)
+
+            strip_axis.bar(positions, chain_summary["n_clusters"], width=0.8, color="#4c4c4c")
+            strip_axis.set_ylabel("Clusters")
+            strip_axis.yaxis.set_major_locator(MaxNLocator(integer=True))
+            strip_axis.tick_params(labelbottom=False)
+            strip_axis.grid(axis="x", visible=False)
+            title_suffix = f"Chain {chain}" if chain not in (None, "") else "Chain"
+            strip_axis.set_title(f"{title_suffix}: clusters per residue")
+
+            map_axis.imshow(image, aspect="auto", interpolation="nearest")
+            map_axis.grid(False)
+            map_axis.set_xlabel("Residue")
+            map_axis.set_ylabel("Model")
+            self.apply_residue_ticks(map_axis, positions, chain_summary["residue_label"].tolist())
+            model_step = max(1, math.ceil(len(models) / 20))
+            map_axis.set_yticks(range(0, len(models), model_step))
+            map_axis.set_yticklabels([str(model) for model in models[::model_step]])
+
+        handles = [
+            Patch(facecolor=cluster_color(label), label=cluster_legend_label(label))
+            for label in sorted(labels_shown)
+        ]
+        if any_missing:
+            handles.append(
+                Patch(facecolor=self.MISSING_COLOR, edgecolor="#c7c7c7", label="Not present")
+            )
+        fig.legend(handles=handles, loc="outside right upper")
+        fig.suptitle(
+            "Per-residue clusters (labels are assigned independently at each residue)",
+            fontsize=14,
+            fontweight="bold",
+        )
+        return fig
+
+
 class ResidueClusterPlotter:
     def plot(self, residue_cluster_df, output_path: str | Path) -> None:
         import matplotlib.pyplot as plt
@@ -306,23 +417,16 @@ class ResidueClusterPlotter:
         title_prefix = f"Chain {chain}" if chain not in (None, "") else "Chain"
 
         unique_clusters = sorted(residue_cluster_df["cluster"].drop_duplicates())
-        cmap = plt.get_cmap("tab10")
 
-        for idx, cluster_label in enumerate(unique_clusters):
+        for cluster_label in unique_clusters:
             cluster_points = residue_cluster_df[residue_cluster_df["cluster"] == cluster_label]
-            if int(cluster_label) == -1:
-                color = "#9e9e9e"
-                legend_label = "Noise"
-            else:
-                color = cmap(idx % 10)
-                legend_label = f"Cluster {int(cluster_label)}"
             ax.scatter(
                 cluster_points["curvature"],
                 cluster_points["torsion"],
                 s=42,
                 alpha=0.85,
-                c=[color],
-                label=legend_label,
+                c=[cluster_color(cluster_label)],
+                label=cluster_legend_label(cluster_label),
                 edgecolors="none",
             )
 
@@ -345,23 +449,16 @@ class ResidueRangeClusterPlotter:
         title_prefix = f"Chain {chain}" if chain not in (None, "") else "Chain"
 
         unique_clusters = sorted(range_cluster_df["cluster"].drop_duplicates())
-        cmap = plt.get_cmap("tab10")
 
-        for idx, cluster_label in enumerate(unique_clusters):
+        for cluster_label in unique_clusters:
             cluster_points = range_cluster_df[range_cluster_df["cluster"] == cluster_label]
-            if int(cluster_label) == -1:
-                color = "#9e9e9e"
-                legend_label = "Noise"
-            else:
-                color = cmap(idx % 10)
-                legend_label = f"Cluster {int(cluster_label)}"
             ax.scatter(
                 cluster_points["pc1"],
                 cluster_points["pc2"],
                 s=48,
                 alpha=0.88,
-                c=[color],
-                label=legend_label,
+                c=[cluster_color(cluster_label)],
+                label=cluster_legend_label(cluster_label),
                 edgecolors="none",
             )
 

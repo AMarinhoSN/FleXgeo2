@@ -186,6 +186,13 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         },
     ),
     OutputFile(
+        "clusters/clusters.png",
+        "clusters/clusters.png",
+        "Cluster of every model (rows) at every residue (columns); grey is noise. The bars "
+        "above show the number of clusters per residue. Labels are assigned independently "
+        "at each residue, so cluster 0 at one residue is unrelated to cluster 0 at another.",
+    ),
+    OutputFile(
         "clusters/residue_plots/*.png",
         "clusters/residue_plots/<chain>_<residue number>_<name>.png",
         "Curvature vs torsion scatter plot for each residue, coloured by cluster.",
@@ -362,6 +369,7 @@ def _key_results(result: AnalysisResult, top: int = 5) -> list[str]:
             more = f", and {len(split) - 10} more" if len(split) > 10 else ""
             lines.append(f"- Residues with most clusters: {shown}{more}.")
         lines.append(f"- {all_noise} residues have every conformation labelled as noise.")
+        lines.append("- Map of every model's cluster at every residue: `clusters/clusters.png`.")
 
     if result.residue_range_clustering is not None:
         ranges = result.residue_range_clustering.summary_df

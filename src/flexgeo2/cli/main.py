@@ -147,7 +147,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-verbose",
         action="store_true",
-        help="Write detailed intermediate tables and per-chain output folders.",
+        help=(
+            "Also write a curvature vs torsion plot per clustered residue, the per-chain "
+            "model summary and the distance matrices."
+        ),
     )
     return parser
 
@@ -213,6 +216,8 @@ def print_run_summary(result) -> None:
         print(f"Distance matrices by chain: {outputs.distance_matrix_dir}")
     if outputs.cluster_summary_csv is not None:
         print(f"Residue cluster summary: {outputs.cluster_summary_csv}")
+        print(f"Residue cluster map: {outputs.cluster_map_plot}")
+    if outputs.cluster_plots_dir is not None:
         print(f"Residue cluster plots: {outputs.cluster_plots_dir}")
     if outputs.cluster_assignments_csv is not None:
         print(f"Residue cluster assignments: {outputs.cluster_assignments_csv}")

@@ -38,6 +38,7 @@ class OutputArtifacts:
     distance_matrix_dir: Path | None = None
     cluster_assignments_csv: Path | None = None
     cluster_summary_csv: Path | None = None
+    cluster_map_plot: Path | None = None
     cluster_plots_dir: Path | None = None
     range_cluster_assignments_csv: Path | None = None
     range_cluster_summary_csv: Path | None = None

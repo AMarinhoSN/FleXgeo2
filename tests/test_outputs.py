@@ -40,6 +40,7 @@ def plotters() -> dict[str, RecordingPlotter]:
             "distance_plotter",
             "residue_cluster_plotter",
             "residue_range_cluster_plotter",
+            "cluster_map_plotter",
         )
     }
 
@@ -157,9 +158,7 @@ FULL_DEFAULT_FILES = BASE_FILES | {
     "reference/heatmap.png",
     "clusters/assignments.csv",
     "clusters/residues.csv",
-    "clusters/residue_plots/A_0001_ALA.png",
-    "clusters/residue_plots/A_0002_GLY.png",
-    "clusters/residue_plots/B_0001_GLY.png",
+    "clusters/clusters.png",
     "range_clusters/assignments.csv",
     "range_clusters/ranges.csv",
     "range_clusters/A_1-2.png",
@@ -169,6 +168,9 @@ FULL_VERBOSE_FILES = FULL_DEFAULT_FILES | {
     "geometry/models_by_chain.csv",
     "reference/matrices/A.csv",
     "reference/matrices/B.csv",
+    "clusters/residue_plots/A_0001_ALA.png",
+    "clusters/residue_plots/A_0002_GLY.png",
+    "clusters/residue_plots/B_0001_GLY.png",
 }
 
 
@@ -221,6 +223,7 @@ def test_default_mode_with_all_analyses(
     assert written_files(tmp_path) == FULL_DEFAULT_FILES
     assert artifacts.model_summary_csv is None
     assert artifacts.distance_matrix_dir is None
+    assert artifacts.cluster_plots_dir is None
 
 
 def test_verbose_mode_with_all_analyses(
@@ -404,6 +407,7 @@ def test_overwrite_removes_stale_outputs_and_keeps_other_files(
     } | {"notes.txt", "clusters/picked.txt"}
     assert not (tmp_path / "reference").exists()
     assert not (tmp_path / "range_clusters").exists()
+    assert not (tmp_path / "clusters" / "residue_plots").exists()
     assert (tmp_path / "notes.txt").read_text() == "mine"
 
 

@@ -96,7 +96,7 @@ artifacts = writer.write(
 )
 ```
 
-By default, `FleXgeo2` writes a lean set of summary tables and plots, organised in one folder per analysis (see the output layout below). Use `--output-verbose` to also write per-chain model summaries and distance matrices.
+By default, `FleXgeo2` writes a lean set of summary tables and plots, organised in one folder per analysis (see the output layout below). Use `--output-verbose` to also write per-chain model summaries, distance matrices and one cluster plot per residue.
 
 Optional outputs:
 
@@ -107,7 +107,7 @@ flexgeo2 path/to/ensemble.pdb \
   --n-jobs -1
 ```
 
-To also write per-chain model summaries and distance matrices:
+To also write per-chain model summaries, distance matrices and per-residue cluster plots:
 
 ```bash
 flexgeo2 path/to/ensemble.pdb --output-verbose
@@ -190,7 +190,7 @@ results/
 ├── clusters/                    # with --cluster-residues
 │   ├── assignments.csv          # per model and residue: cluster label, probability
 │   ├── residues.csv             # per residue: number of clusters, noise fraction
-│   └── residue_plots/<chain>_<residue number>_<name>.png
+│   └── clusters.png             # cluster of every model at every residue
 └── range_clusters/              # with --cluster-residue-range
     ├── assignments.csv          # per model and range: cluster label, PCA coordinates
     ├── ranges.csv               # per range: number of clusters, noise fraction
@@ -200,10 +200,12 @@ results/
 All tables are in long ("tidy") format with a `chain` column, so a single chain can be
 selected by filtering that column.
 
-`--output-verbose` adds two derived tables:
+`--output-verbose` adds:
 
 - `geometry/models_by_chain.csv`: the per-model summary computed separately per chain
 - `reference/matrices/<chain>.csv`: distances as a models x residues matrix
+- `clusters/residue_plots/<chain>_<residue number>_<name>.png`: a curvature vs torsion
+  scatter plot for each clustered residue
 
 Residue plot names start with the zero-padded residue number
 (e.g. `A_0045_ALA.png`), so they sort in sequence order.

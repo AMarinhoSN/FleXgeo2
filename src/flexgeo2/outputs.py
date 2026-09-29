@@ -6,6 +6,7 @@ from flexgeo2.config import OutputConfig
 from flexgeo2.distances import DistanceService
 from flexgeo2.models import AnalysisResult, OutputArtifacts
 from flexgeo2.plotting import (
+    ClusterMapPlotter,
     DistanceHeatmapPlotter,
     OverviewPlotter,
     ResidueClusterPlotter,
@@ -85,6 +86,7 @@ class OutputWriter:
         distance_plotter: DistanceHeatmapPlotter | None = None,
         residue_cluster_plotter: ResidueClusterPlotter | None = None,
         residue_range_cluster_plotter: ResidueRangeClusterPlotter | None = None,
+        cluster_map_plotter: ClusterMapPlotter | None = None,
     ) -> None:
         self.config = config
         self.overview_plotter = overview_plotter or OverviewPlotter()
@@ -93,6 +95,7 @@ class OutputWriter:
         self.residue_range_cluster_plotter = (
             residue_range_cluster_plotter or ResidueRangeClusterPlotter()
         )
+        self.cluster_map_plotter = cluster_map_plotter or ClusterMapPlotter()
 
     @staticmethod
     def write_distance_matrix_csv(distance_long_df, output_path: str | Path) -> None:
@@ -131,7 +134,10 @@ class OutputWriter:
             ),
             cluster_assignments_csv=clusters_dir / "assignments.csv" if clusters_dir else None,
             cluster_summary_csv=clusters_dir / "residues.csv" if clusters_dir else None,
-            cluster_plots_dir=clusters_dir / "residue_plots" if clusters_dir else None,
+            cluster_map_plot=clusters_dir / "clusters.png" if clusters_dir else None,
+            cluster_plots_dir=(
+                clusters_dir / "residue_plots" if clusters_dir is not None and verbose else None
+            ),
             range_cluster_assignments_csv=(
                 range_clusters_dir / "assignments.csv" if range_clusters_dir else None
             ),
@@ -175,14 +181,20 @@ class OutputWriter:
                     )
 
         if result.residue_clustering is not None:
-            artifacts.cluster_plots_dir.mkdir(parents=True, exist_ok=True)
             result.residue_clustering.assignments_df.to_csv(
                 artifacts.cluster_assignments_csv, index=False
             )
             result.residue_clustering.summary_df.to_csv(artifacts.cluster_summary_csv, index=False)
-            self._plot_residue_clusters(
-                result.residue_clustering.assignments_df, artifacts.cluster_plots_dir
+            self.cluster_map_plotter.plot(
+                result.residue_clustering.summary_df,
+                artifacts.cluster_map_plot,
+                result.residue_clustering.assignments_df,
             )
+            if artifacts.cluster_plots_dir is not None:
+                artifacts.cluster_plots_dir.mkdir(parents=True, exist_ok=True)
+                self._plot_residue_clusters(
+                    result.residue_clustering.assignments_df, artifacts.cluster_plots_dir
+                )
 
         if result.residue_range_clustering is not None:
             result.residue_range_clustering.assignments_df.to_csv(

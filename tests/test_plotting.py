@@ -1,17 +1,23 @@
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pytest
+from matplotlib.colors import to_rgba
 from matplotlib.figure import Figure
 
 from flexgeo2.geometry import GeometryService
 from flexgeo2.plotting import (
+    NOISE_COLOR,
     ChainGeometryPlotter,
+    ClusterMapPlotter,
     DistanceHeatmapPlotter,
     OverviewPlotter,
     ResidueClusterPlotter,
     ResidueRangeClusterPlotter,
+    cluster_color,
+    cluster_palette,
 )
 
 
@@ -150,7 +156,7 @@ def legend_labels(figure: Figure) -> list[str]:
 
 @pytest.mark.parametrize(
     "plotter",
-    ["chain", "overview", "heatmap", "residue_cluster", "range_cluster"],
+    ["chain", "overview", "heatmap", "residue_cluster", "range_cluster", "cluster_map"],
 )
 def test_every_plotter_writes_a_readable_png(
     plotter: str,
@@ -160,6 +166,7 @@ def test_every_plotter_writes_a_readable_png(
 ) -> None:
     output = tmp_path / f"{plotter}.png"
     chain_raw_df, chain_summary_df = chain_frames(normalized_geometry_df)
+    map_summary, map_assignments = cluster_map_frames({1: [0, 0, 1], 2: [-1, 0, 0]})
     calls = {
         "chain": lambda: ChainGeometryPlotter().plot(
             chain_raw_df, chain_summary_df, output, show_model_traces=True, max_models_in_plot=12
@@ -176,6 +183,7 @@ def test_every_plotter_writes_a_readable_png(
         "range_cluster": lambda: ResidueRangeClusterPlotter().plot(
             range_cluster_df([-1, 0, 0, 1]), output
         ),
+        "cluster_map": lambda: ClusterMapPlotter().plot(map_summary, output, map_assignments),
     }
 
     calls[plotter]()
@@ -283,3 +291,115 @@ def test_heatmap_rejects_all_missing_distances(distance_long_df: pd.DataFrame) -
 
     with pytest.raises(ValueError, match="empty after alignment"):
         DistanceHeatmapPlotter().render(missing, "title")
+
+
+def cluster_map_frames(
+    labels_by_order: dict[int, list[int]], chain: str = "A"
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Summary and assignments for residues {order: [label of model 1, 2, ...]}."""
+    names = {1: "VAL1", 2: "ALA2", 10: "MET10"}
+    assignments = pd.DataFrame(
+        [
+            {
+                "chain": chain,
+                "model": model,
+                "order": order,
+                "residue_label": names[order],
+                "cluster": label,
+            }
+            for order, labels in labels_by_order.items()
+            for model, label in enumerate(labels, start=1)
+        ]
+    )
+    summary = pd.DataFrame(
+        [
+            {
+                "chain": chain,
+                "order": order,
+                "residue_label": names[order],
+                "n_clusters": len({label for label in labels if label >= 0}),
+            }
+            for order, labels in labels_by_order.items()
+        ]
+    )
+    return summary, assignments
+
+
+def test_cluster_map_colours_each_cell_by_its_label() -> None:
+    # Given out of sequence order; residue labels also sort differently from order.
+    labels = {10: [2, 2, -1], 1: [0, 0, 1], 2: [-1, 0, 0]}
+    summary, assignments = cluster_map_frames(labels)
+
+    fig = ClusterMapPlotter().render(summary, assignments)
+    try:
+        strip_axis, map_axis = fig.axes
+        image = map_axis.get_images()[0].get_array()
+        for column, order in enumerate([1, 2, 10]):
+            for row, label in enumerate(labels[order]):
+                assert tuple(image[row, column]) == to_rgba(cluster_color(label)), (order, row)
+
+        assert [bar.get_height() for bar in strip_axis.patches] == [2, 1, 1]
+        assert [tick.get_text() for tick in map_axis.get_xticklabels()] == [
+            "VAL1",
+            "ALA2",
+            "MET10",
+        ]
+        assert [tick.get_text() for tick in map_axis.get_yticklabels()] == ["1", "2", "3"]
+        assert [text.get_text() for text in fig.legends[0].get_texts()] == [
+            "Noise",
+            "Cluster 0",
+            "Cluster 1",
+            "Cluster 2",
+        ]
+    finally:
+        plt.close(fig)
+
+
+def test_cluster_map_marks_missing_residues_and_draws_each_chain() -> None:
+    summary_a, assignments_a = cluster_map_frames({1: [0, 0, 1], 2: [0, 0, 0]})
+    summary_b, assignments_b = cluster_map_frames({1: [0, 1, 1]}, chain="B")
+    # Model 3 lacks residue 2 of chain A.
+    assignments_a = assignments_a.drop(
+        assignments_a[(assignments_a["order"] == 2) & (assignments_a["model"] == 3)].index
+    )
+    summary = pd.concat([summary_a, summary_b], ignore_index=True)
+    assignments = pd.concat([assignments_a, assignments_b], ignore_index=True)
+
+    fig = ClusterMapPlotter().render(summary, assignments)
+    try:
+        titles = [axis.get_title() for axis in fig.axes]
+        assert titles == ["Chain A: clusters per residue", "", "Chain B: clusters per residue", ""]
+        image_a = fig.axes[1].get_images()[0].get_array()
+        assert tuple(image_a[2, 1]) == to_rgba("white")
+        assert fig.legends[0].get_texts()[-1].get_text() == "Not present"
+    finally:
+        plt.close(fig)
+
+
+def test_cluster_colours_depend_only_on_the_label(saved_figures: list[Figure], tmp_path) -> None:
+    ResidueClusterPlotter().plot(residue_cluster_df([0, 0, 1]), tmp_path / "no_noise.png")
+    ResidueClusterPlotter().plot(residue_cluster_df([-1, 0, 1]), tmp_path / "noise.png")
+
+    def colours(figure: Figure) -> dict[str, tuple]:
+        axis = figure.axes[0]
+        return {
+            text.get_text(): tuple(collection.get_facecolor()[0])
+            for text, collection in zip(
+                axis.get_legend().get_texts(), axis.collections, strict=True
+            )
+        }
+
+    without_noise, with_noise = (colours(figure) for figure in saved_figures)
+    assert with_noise["Cluster 0"] == without_noise["Cluster 0"]
+    assert with_noise["Cluster 1"] == without_noise["Cluster 1"]
+
+
+def test_cluster_palette_is_distinct_and_avoids_the_noise_grey() -> None:
+    palette = [to_rgba(color) for color in cluster_palette()]
+
+    assert len(set(palette)) == len(palette) >= 18
+    for color in palette:
+        red, green, blue, _ = color
+        assert not (np.isclose(red, green) and np.isclose(green, blue)), color
+    assert cluster_color(0) != cluster_color(10)
+    assert cluster_color(-1) == NOISE_COLOR
