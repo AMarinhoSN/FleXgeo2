@@ -44,8 +44,8 @@ def label_rows(axis, values) -> None:
     """Label an image axis that has one row (or column) per value, e.g. model IDs.
 
     Labels go on round values (multiples of 1, 2, 5, 10, 20, 50, ...), as many as fit
-    the axis once the figure is laid out, so they do not overlap however many rows
-    there are. Values need not be contiguous.
+    the axis once the figure is laid out (at most 10), so they do not overlap however
+    many rows there are. Values need not be contiguous.
     """
     from matplotlib.ticker import FuncFormatter, Locator
 
@@ -55,8 +55,8 @@ def label_rows(axis, values) -> None:
         def __call__(self):
             if not values:
                 return []
-            # Matplotlib's own estimate of how many labels fit (about 2 font sizes apart).
-            room = max(1, self.axis.get_tick_space())
+            # As many labels as fit (matplotlib's estimate), at most 10 like its other axes.
+            room = max(1, min(self.axis.get_tick_space(), 10))
             step = _round_step(max(values) - min(values), room)
             ticks = [row for row, value in enumerate(values) if value % step == 0]
             by_row = list(range(0, len(values), _round_step(len(values) - 1, room)))
@@ -111,12 +111,11 @@ class PlotStyle:
 
 class BasePlotter:
     @staticmethod
-    def apply_residue_ticks(axis, x_values, residue_labels) -> None:
-        if len(residue_labels) == 0:
-            return
-        tick_step = max(1, math.ceil(len(residue_labels) / 18))
-        axis.set_xticks(x_values[::tick_step])
-        axis.set_xticklabels(residue_labels[::tick_step], rotation=45, ha="right")
+    def apply_residue_ticks(axis) -> None:
+        """Ticks on round residue numbers for an x axis in residue-number coordinates."""
+        from matplotlib.ticker import MaxNLocator
+
+        axis.xaxis.set_major_locator(MaxNLocator(nbins="auto", integer=True, steps=[1, 2, 5, 10]))
 
     @staticmethod
     def plot_model_traces(curvature_axis, torsion_axis, chain_raw_df, max_models_in_plot) -> None:
@@ -153,7 +152,6 @@ class ChainGeometryPlotter(BasePlotter):
         fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(12, 8), constrained_layout=True)
 
         x_values = chain_summary_df["order"].to_numpy()
-        residue_labels = chain_summary_df["residue_label"].tolist()
         chain_id = chain_summary_df["chain"].iloc[0] if not chain_summary_df.empty else None
         title_suffix = f"Chain {chain_id}" if chain_id not in (None, "") else "Chain"
 
@@ -201,7 +199,7 @@ class ChainGeometryPlotter(BasePlotter):
 
         for axis in axes:
             axis.grid(alpha=0.3)
-            self.apply_residue_ticks(axis, x_values, residue_labels)
+            self.apply_residue_ticks(axis)
 
         fig.suptitle("Backbone Differential Geometry", fontsize=16, fontweight="bold")
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
@@ -344,7 +342,7 @@ class OverviewPlotter(BasePlotter):
             bottom = axes[panels[-1]]
             bottom.tick_params(labelbottom=True)
             bottom.set_xlabel("Residue")
-            self.apply_residue_ticks(bottom, x_values, chain_df["residue_label"].tolist())
+            self.apply_residue_ticks(bottom)
 
         fig.suptitle("Ensemble Overview", fontsize=16, fontweight="bold")
         return fig
@@ -437,12 +435,9 @@ class DistanceHeatmapPlotter:
                     ha="right",
                 )
 
-            residue_labels = list(matrix.columns)
-            if residue_labels:
-                residue_tick_step = max(1, math.ceil(len(residue_labels) / 25))
-                residue_tick_positions = list(range(0, len(residue_labels), residue_tick_step))
-                axis.set_yticks(residue_tick_positions)
-                axis.set_yticklabels([residue_labels[index] for index in residue_tick_positions])
+            # to_matrix puts residues in sequence order, one column per residue number.
+            chain_orders = distance_long_df.loc[distance_long_df["chain"] == chain, "order"]
+            label_rows(axis.yaxis, sorted(chain_orders.unique()))
 
             fig.colorbar(
                 image,
@@ -519,7 +514,7 @@ class ClusterMapPlotter(BasePlotter):
             map_axis.grid(False)
             map_axis.set_xlabel("Residue")
             map_axis.set_ylabel("Model")
-            self.apply_residue_ticks(map_axis, positions, chain_summary["residue_label"].tolist())
+            label_rows(map_axis.xaxis, chain_summary["order"])
             label_rows(map_axis.yaxis, models)
 
         handles = [

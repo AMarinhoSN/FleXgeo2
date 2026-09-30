@@ -70,7 +70,7 @@ def test_heatmap_residue_axis_follows_sequence_order(distance_long_df: pd.DataFr
     try:
         axis = fig.axes[0]
         labels = [tick.get_text() for tick in axis.get_yticklabels()]
-        assert labels == ["VAL1", "ALA2", "MET10"]
+        assert labels == ["1", "2", "10"]
         assert not any(line.get_visible() for line in axis.get_xgridlines())
     finally:
         plt.close(fig)
@@ -428,6 +428,7 @@ def cluster_map_frames(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Summary and assignments for residues {order: [label of model 1, 2, ...]}."""
     names = {1: "VAL1", 2: "ALA2", 10: "MET10"}
+    names = {order: names.get(order, f"ALA{order}") for order in labels_by_order}
     assignments = pd.DataFrame(
         [
             {
@@ -469,11 +470,7 @@ def test_cluster_map_colours_each_cell_by_its_label() -> None:
                 assert tuple(image[row, column]) == to_rgba(cluster_color(label)), (order, row)
 
         assert [bar.get_height() for bar in strip_axis.patches] == [2, 1, 1]
-        assert [tick.get_text() for tick in map_axis.get_xticklabels()] == [
-            "VAL1",
-            "ALA2",
-            "MET10",
-        ]
+        assert [tick.get_text() for tick in map_axis.get_xticklabels()] == ["1", "2", "10"]
         assert [tick.get_text() for tick in map_axis.get_yticklabels()] == ["1", "2", "3"]
         assert [text.get_text() for text in fig.legends[0].get_texts()] == [
             "Noise",
@@ -485,19 +482,46 @@ def test_cluster_map_colours_each_cell_by_its_label() -> None:
         plt.close(fig)
 
 
-def drawn_model_labels(summary: pd.DataFrame, assignments: pd.DataFrame) -> list:
-    """The model-axis labels of a laid-out cluster map, bottom to top."""
-    fig = ClusterMapPlotter().render(summary, assignments)
+def drawn_labels(fig: Figure, axis_index: int, which: str) -> list:
+    """(text, extent) of the tick labels of one axis once laid out, left/bottom first."""
     try:
         fig.canvas.draw()
         renderer = fig.canvas.get_renderer()
-        labels = [label for label in fig.axes[1].get_yticklabels() if label.get_text()]
+        axis = fig.axes[axis_index].xaxis if which == "x" else fig.axes[axis_index].yaxis
+        low, high = sorted(axis.get_view_interval())
+        coordinate = 0 if which == "x" else 1
+        # Matplotlib keeps labels for ticks just outside the axis but does not draw them.
+        drawn = [
+            label
+            for label in axis.get_ticklabels()
+            if label.get_text() and low <= label.get_position()[coordinate] <= high
+        ]
         return sorted(
-            ((label.get_text(), label.get_window_extent(renderer)) for label in labels),
-            key=lambda item: item[1].y0,
+            ((label.get_text(), label.get_window_extent(renderer)) for label in drawn),
+            key=lambda item: item[1].x0 if which == "x" else item[1].y0,
         )
     finally:
         plt.close(fig)
+
+
+def drawn_model_labels(summary: pd.DataFrame, assignments: pd.DataFrame) -> list:
+    """The model-axis labels of a laid-out cluster map, bottom to top."""
+    return drawn_labels(ClusterMapPlotter().render(summary, assignments), 1, "y")
+
+
+def assert_round_and_apart(labels: list, which: str) -> list[int]:
+    """2-10 labels on multiples of one 1-2-5 step, not overlapping; returns them sorted."""
+    texts = sorted(int(text) for text, _ in labels)
+    assert 2 <= len(texts) <= 10
+    step = texts[1] - texts[0]
+    assert step in (1, 2, 5, 10, 20, 50, 100, 200, 500)
+    assert all(text % step == 0 for text in texts)
+    for (_, first), (_, second) in pairwise(labels):
+        if which == "x":
+            assert first.x1 <= second.x0, "labels overlap"
+        else:
+            assert first.y1 <= second.y0, "labels overlap"
+    return texts
 
 
 @pytest.mark.parametrize("n_models", [3, 10, 16, 20, 50, 500])
@@ -506,15 +530,103 @@ def test_cluster_map_model_labels_do_not_overlap(n_models: int) -> None:
 
     labels = drawn_model_labels(summary, assignments)
 
-    texts = sorted(int(text) for text, _ in labels)
-    assert len(texts) >= 2
+    texts = assert_round_and_apart(labels, "y")
     assert set(texts) <= set(range(1, n_models + 1))
-    # Round numbers: every label is a multiple of the same step (1, 2, 5, 10, ...).
-    step = texts[1] - texts[0]
-    assert step in (1, 2, 5, 10, 20, 50, 100)
-    assert all(text % step == 0 for text in texts)
-    for (_, lower), (_, upper) in pairwise(labels):
-        assert lower.y1 <= upper.y0, "model labels overlap"
+
+
+def residue_axis_figure(kind: str, orders: list[int]) -> tuple[Figure, int, str]:
+    """A figure with one residue per number in ``orders``; its residue axis index and x/y."""
+    if kind == "overview":
+        summary = pd.DataFrame(
+            {
+                "chain": "A",
+                "order": orders,
+                "residue_label": [f"ALA{order}" for order in orders],
+                "curvature_mean": 0.3,
+                "curvature_std": 0.05,
+                "torsion_mean": 0.1,
+                "torsion_std": 0.05,
+                "dmax": 0.2,
+            }
+        )
+        return OverviewPlotter().render(summary), 2, "x"
+    if kind == "cluster_map":
+        summary, assignments = cluster_map_frames({order: [0, 0, 1] for order in orders})
+        return ClusterMapPlotter().render(summary, assignments), 1, "x"
+    distances = pd.DataFrame(
+        [
+            {
+                "chain": "A",
+                "model": model,
+                "order": order,
+                "residue_label": f"ALA{order}",
+                "distance_to_reference": 0.1 * model,
+            }
+            for model in (1, 2, 3)
+            for order in orders
+        ]
+    )
+    return DistanceHeatmapPlotter().render(distances, "title"), 0, "y"
+
+
+@pytest.mark.parametrize("kind", ["overview", "cluster_map", "heatmap"])
+@pytest.mark.parametrize(
+    "orders",
+    [
+        list(range(1, 5)),
+        list(range(1, 77)),
+        list(range(1, 301)),
+        list(range(-4, 996)),
+        list(range(20, 3020)),
+    ],
+    ids=["4", "76", "300", "1000 from -4", "3000 from 20"],
+)
+def test_residue_axis_labels_round_residue_numbers(kind: str, orders: list[int]) -> None:
+    fig, axis_index, which = residue_axis_figure(kind, orders)
+
+    # Integer labels only (no 1.5 on short chains), on round numbers, not overlapping.
+    texts = assert_round_and_apart(drawn_labels(fig, axis_index, which), which)
+
+    assert len(texts) >= 4
+    assert set(texts) <= set(orders)
+
+
+def test_heatmap_labels_each_chain_with_its_own_residue_numbers() -> None:
+    distances = pd.DataFrame(
+        [
+            {
+                "chain": chain,
+                "model": model,
+                "order": order,
+                "residue_label": f"ALA{order}",
+                "distance_to_reference": 0.1 * model,
+            }
+            for chain, orders in (("A", range(1, 101)), ("B", range(501, 601)))
+            for model in (1, 2, 3)
+            for order in orders
+        ]
+    )
+    fig = DistanceHeatmapPlotter().render(distances, "title")
+
+    # The chain panels come first in fig.axes, then their colour bars.
+    chain_b = [int(text) for text, _ in drawn_labels(fig, 1, "y")]
+
+    assert chain_b
+    assert set(chain_b) <= set(range(501, 601))
+
+
+def test_residue_axis_labels_name_the_right_residues_despite_gaps() -> None:
+    # Residues 11-29 are missing: image columns are consecutive, labels still name them.
+    orders = [*range(1, 11), *range(30, 101)]
+    fig, axis_index, which = residue_axis_figure("cluster_map", orders)
+    try:
+        fig.canvas.draw()
+        ticks = fig.axes[axis_index].get_xticklabels()
+        assert ticks
+        for tick in ticks:
+            assert tick.get_text() == str(orders[round(tick.get_position()[0])])
+    finally:
+        plt.close(fig)
 
 
 def test_cluster_map_labels_irregular_model_ids() -> None:
