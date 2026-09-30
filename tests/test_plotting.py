@@ -336,6 +336,86 @@ def test_heatmap_has_one_panel_per_chain(distance_long_df: pd.DataFrame) -> None
         plt.close(fig)
 
 
+def spiky_distances(chain: str = "A", spike: float = 100.0, seed: int = 0) -> pd.DataFrame:
+    """50 models x 10 residues of distances in [0, 1), plus one very large distance."""
+    rng = np.random.default_rng(seed)
+    df = pd.DataFrame(
+        [
+            {
+                "chain": chain,
+                "model": model,
+                "order": order,
+                "residue_label": f"ALA{order}",
+                "distance_to_reference": rng.uniform(0, 1),
+            }
+            for model in range(1, 51)
+            for order in range(1, 11)
+        ]
+    )
+    df.loc[0, "distance_to_reference"] = spike
+    return df
+
+
+def heatmap_scales(fig: Figure) -> list[tuple[float, float, str]]:
+    """(vmin, vmax, colour bar extend) of each heatmap panel."""
+    images = [image for axis in fig.axes for image in axis.get_images()]
+    return [(image.norm.vmin, image.norm.vmax, image.colorbar.extend) for image in images]
+
+
+def test_heatmap_colour_scale_ignores_rare_large_distances() -> None:
+    distances = spiky_distances()
+
+    fig = DistanceHeatmapPlotter().render(distances, "title")
+    try:
+        [(vmin, vmax, extend)] = heatmap_scales(fig)
+    finally:
+        plt.close(fig)
+
+    expected = np.percentile(distances["distance_to_reference"], 99, method="higher")
+    assert vmin == 0
+    assert vmax == pytest.approx(expected)
+    assert vmax < 1
+    assert extend == "max"
+
+
+def test_heatmap_colour_scale_is_not_capped_for_small_matrices(
+    distance_long_df: pd.DataFrame,
+) -> None:
+    fig = DistanceHeatmapPlotter().render(distance_long_df, "title")
+    try:
+        assert heatmap_scales(fig) == [(0, 20.0, "neither")]
+    finally:
+        plt.close(fig)
+
+
+def test_heatmap_colour_scale_is_set_per_chain() -> None:
+    chain_b = spiky_distances("B", seed=1)
+    chain_b["distance_to_reference"] = 10 * np.minimum(chain_b["distance_to_reference"], 1)
+    distances = pd.concat([spiky_distances("A"), chain_b], ignore_index=True)
+
+    fig = DistanceHeatmapPlotter().render(distances, "title")
+    try:
+        (_, vmax_a, _), (_, vmax_b, _) = heatmap_scales(fig)
+    finally:
+        plt.close(fig)
+
+    assert vmax_a < 1
+    assert 9 < vmax_b <= 10
+
+
+def test_heatmap_accepts_all_zero_distances(distance_long_df: pd.DataFrame) -> None:
+    # E.g. every model identical to the reference: nothing to cap, and no error.
+    fig = DistanceHeatmapPlotter().render(
+        distance_long_df.assign(distance_to_reference=0.0), "title"
+    )
+    try:
+        [scale] = heatmap_scales(fig)
+    finally:
+        plt.close(fig)
+
+    assert scale == (0, 1.0, "neither")
+
+
 def test_heatmap_rejects_all_missing_distances(distance_long_df: pd.DataFrame) -> None:
     missing = distance_long_df.assign(distance_to_reference=float("nan"))
 

@@ -92,6 +92,10 @@ model numbers, so results and scripts written for it need updating: see
   ran, clusters per residue and the mean distance to the reference.
 - A cluster label has the same colour in every plot, from an 18-colour palette that
   keeps grey for noise.
+- The distance heatmap's colour scale runs from 0 to the 99th percentile of each chain's
+  distances instead of from the smallest to the largest, so a few very large distances
+  no longer leave the rest of the map black. Larger distances share the top colour,
+  marked by an arrow on the colour bar.
 
 ### Fixed
 

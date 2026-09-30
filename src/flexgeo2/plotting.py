@@ -362,6 +362,11 @@ class OverviewPlotter(BasePlotter):
 
 
 class DistanceHeatmapPlotter:
+    # The colour scale ends at this percentile of each chain's distances. A few very
+    # large distances (e.g. torsion spikes) would otherwise stretch it until the rest
+    # of the map is black; the larger values share the top colour.
+    COLOR_PERCENTILE = 99
+
     def plot(self, distance_long_df, output_path: str | Path, title: str) -> None:
         import matplotlib.pyplot as plt
 
@@ -371,6 +376,7 @@ class DistanceHeatmapPlotter:
 
     def render(self, distance_long_df, title: str):
         import matplotlib.pyplot as plt
+        import numpy as np
         import pandas as pd
 
         # Build and validate every chain's matrix before creating the figure, so an
@@ -398,12 +404,18 @@ class DistanceHeatmapPlotter:
             axes = [axes]
 
         for axis, (chain, matrix) in zip(axes, matrices.items(), strict=True):
+            values = matrix.to_numpy(dtype=float)
+            # "higher" picks an observed distance, so small matrices are not capped.
+            vmax = float(np.nanpercentile(values, self.COLOR_PERCENTILE, method="higher"))
             image = axis.imshow(
-                matrix.to_numpy().T,
+                values.T,
                 aspect="auto",
                 cmap="magma",
                 interpolation="nearest",
                 origin="lower",
+                vmin=0,
+                # All distances zero: keep a 0-1 scale (matplotlib would pick -0.1 to 0.1).
+                vmax=vmax if vmax > 0 else 1.0,
             )
             axis.set_title(
                 f"Chain {chain}: Distance to reference"
@@ -432,7 +444,15 @@ class DistanceHeatmapPlotter:
                 axis.set_yticks(residue_tick_positions)
                 axis.set_yticklabels([residue_labels[index] for index in residue_tick_positions])
 
-            fig.colorbar(image, ax=axis, fraction=0.024, pad=0.02, label="Euclidean distance")
+            fig.colorbar(
+                image,
+                ax=axis,
+                fraction=0.024,
+                pad=0.02,
+                label="Euclidean distance",
+                # An arrow at the top of the colour bar marks a capped scale.
+                extend="max" if np.nanmax(values) > vmax else "neither",
+            )
 
         fig.suptitle(title, fontsize=16, fontweight="bold")
         return fig
