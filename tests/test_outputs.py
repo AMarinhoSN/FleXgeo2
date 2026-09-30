@@ -549,3 +549,31 @@ def test_no_residue_plots_unless_requested(
 
     assert artifacts.residue_plots_dir is None
     assert plotters["residue_plotter"].calls == []
+
+
+def test_plot_format_applies_to_every_figure(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+) -> None:
+    config = OutputConfig(output_dir=tmp_path, plot_format="svg", plot_residues=["1"])
+    OutputWriter(config, **plotters).write(
+        full_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    expected = {name.replace(".png", ".svg") for name in FULL_DEFAULT_FILES} | {
+        "residue_plots/A_0001_ALA.svg",
+        "residue_plots/B_0001_GLY.svg",
+    }
+    assert written_files(tmp_path) == expected
+
+
+@pytest.mark.parametrize(("before", "after"), [("png", "pdf"), ("pdf", "png"), ("svg", "pdf")])
+def test_overwrite_removes_figures_of_an_earlier_run_in_another_format(
+    tmp_path: Path, plotters: dict, base_result: AnalysisResult, before: str, after: str
+) -> None:
+    for plot_format, overwrite in ((before, False), (after, True)):
+        config = OutputConfig(output_dir=tmp_path, overwrite=overwrite, plot_format=plot_format)
+        OutputWriter(config, **plotters).write(
+            base_result, max_models_in_plot=12, hide_model_traces=False
+        )
+
+    assert written_files(tmp_path) == {name.replace(".png", f".{after}") for name in BASE_FILES}

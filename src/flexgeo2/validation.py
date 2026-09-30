@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from flexgeo2.clustering import ClusteringService
-from flexgeo2.config import AnalysisConfig
+from flexgeo2.config import PLOT_FORMATS, AnalysisConfig
 from flexgeo2.geometry import GeometryService, StructureInfo
 from flexgeo2.outputs import check_output_dir
 from flexgeo2.selection import parse_residue_selections, select_residues
@@ -47,6 +47,11 @@ def validate_config(config: AnalysisConfig) -> None:
         ClusteringService.parse_residue_range(range_text)
 
     parse_residue_selections(config.output.plot_residues)
+    if config.output.plot_format not in PLOT_FORMATS:
+        raise ValueError(
+            f"Plot format must be one of {', '.join(PLOT_FORMATS)}, "
+            f"not '{config.output.plot_format}'."
+        )
 
     if config.output.distance_matrices and reference is None:
         raise ValueError(

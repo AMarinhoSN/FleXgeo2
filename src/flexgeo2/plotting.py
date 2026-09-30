@@ -59,6 +59,10 @@ class PlotStyle:
                 "xtick.labelsize": 9,
                 "ytick.labelsize": 9,
                 "legend.frameon": False,
+                # Vector figures stay editable: TrueType fonts in PDF (journals often
+                # reject matplotlib's default Type 3), real text rather than paths in SVG.
+                "pdf.fonttype": 42,
+                "svg.fonttype": "none",
             }
         )
 

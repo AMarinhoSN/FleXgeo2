@@ -11,7 +11,7 @@ import pytest
 
 from flexgeo2 import AnalysisConfig, ClusteringConfig, FlexGeo2App, OutputConfig
 from flexgeo2.cli.main import main
-from flexgeo2.report import FILE_GUIDE, render_readme, render_terminal_summary, written_files
+from flexgeo2.report import file_guide, render_readme, render_terminal_summary, written_files
 
 pytest.importorskip("melodia_py")
 
@@ -73,7 +73,7 @@ def sha256(path: Path) -> str:
 
 
 def test_every_csv_column_is_described(full_run: Path) -> None:
-    guide = {entry.pattern: entry for entry in FILE_GUIDE}
+    guide = {entry.pattern: entry for entry in file_guide()}
     csv_files = [name for name in files_on_disk(full_run) if name.endswith(".csv")]
     assert csv_files, "the run should have written CSV files"
 
@@ -95,7 +95,7 @@ def test_guide_and_manifest_cover_exactly_the_files_written(full_run: Path) -> N
 def test_readme_describes_every_output_that_was_written(full_run: Path) -> None:
     readme = (full_run / "README.md").read_text()
 
-    for entry in FILE_GUIDE:
+    for entry in file_guide("png"):
         assert f"`{entry.display}`" in readme, entry.display
         for column in entry.columns:
             assert f"`{column}`" in readme, (entry.display, column)
@@ -245,3 +245,42 @@ def test_terminal_summary_hints_at_all_noise_ranges_and_skips_missing_files() ->
     )
     assert "Range clustering A 6-9: 2 clusters, 25% noise" in lines
     assert not any(line.startswith("Results:") for line in lines)
+
+
+@pytest.mark.parametrize(("plot_format", "magic"), [("pdf", b"%PDF"), ("svg", b"<?xml")])
+def test_vector_plot_formats_are_written_and_described(plot_format: str, magic: bytes) -> None:
+    arguments = [str(MINI_ENSEMBLE), "--output-dir", "out", "--reference-model", "1"]
+    arguments += ["--cluster-residues", "--cluster-min-size", "2", "--plot-residues", "3"]
+    assert main([*arguments, "--plot-format", plot_format]) == 0
+
+    out = Path("out")
+    figures = [name for name in files_on_disk(out) if not name.endswith((".csv", ".md", ".json"))]
+    assert figures == [
+        f"clusters/clusters.{plot_format}",
+        f"overview.{plot_format}",
+        f"reference/heatmap.{plot_format}",
+        f"residue_plots/A_0003_{pd.read_csv(out / 'geometry' / 'residues.csv')['name'][2]}"
+        f".{plot_format}",
+    ]
+    for name in figures:
+        assert (out / name).read_bytes().startswith(magic), name
+
+    readme = (out / "README.md").read_text()
+    assert f"Start with `overview.{plot_format}`" in readme
+    assert f"### `reference/heatmap.{plot_format}`" in readme
+    assert ".png" not in readme
+    assert (
+        json.loads((out / "run.json").read_text())["parameters"]["output"]["plot_format"]
+        == plot_format
+    )
+
+
+def test_vector_figures_keep_text_editable() -> None:
+    assert main([str(MINI_ENSEMBLE), "--output-dir", "pdf", "--plot-format", "pdf"]) == 0
+    assert main([str(MINI_ENSEMBLE), "--output-dir", "svg", "--plot-format", "svg"]) == 0
+
+    pdf = Path("pdf/overview.pdf").read_bytes()
+    assert b"/FontFile2" in pdf  # embedded TrueType font
+    assert b"/Type3" not in pdf
+    svg = Path("svg/overview.svg").read_text()
+    assert "<text" in svg  # text kept as text, not converted to paths

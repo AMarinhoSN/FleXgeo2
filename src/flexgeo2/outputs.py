@@ -109,6 +109,7 @@ class OutputWriter:
 
         check_output_dir(self.config)
         output_dir = Path(self.config.output_dir).resolve()
+        ext = self.config.plot_format
         if self.config.overwrite:
             remove_previous_outputs(output_dir)
         geometry_dir = output_dir / "geometry"
@@ -131,10 +132,10 @@ class OutputWriter:
                 else None
             ),
             overall_model_summary_csv=geometry_dir / "models.csv",
-            overview_plot=output_dir / "overview.png",
+            overview_plot=output_dir / f"overview.{ext}",
             distance_long_csv=reference_dir / "distances.csv" if reference_dir else None,
             distance_summary_csv=reference_dir / "residues.csv" if reference_dir else None,
-            distance_heatmap=reference_dir / "heatmap.png" if reference_dir else None,
+            distance_heatmap=reference_dir / f"heatmap.{ext}" if reference_dir else None,
             distance_matrix_dir=(
                 reference_dir / "matrices"
                 if reference_dir is not None and self.config.distance_matrices
@@ -142,7 +143,7 @@ class OutputWriter:
             ),
             cluster_assignments_csv=clusters_dir / "assignments.csv" if clusters_dir else None,
             cluster_summary_csv=clusters_dir / "residues.csv" if clusters_dir else None,
-            cluster_map_plot=clusters_dir / "clusters.png" if clusters_dir else None,
+            cluster_map_plot=clusters_dir / f"clusters.{ext}" if clusters_dir else None,
             range_cluster_assignments_csv=(
                 range_clusters_dir / "assignments.csv" if range_clusters_dir else None
             ),
@@ -232,9 +233,9 @@ class OutputWriter:
         return artifacts
 
     @staticmethod
-    def residue_plot_name(chain, order: int, name: str) -> str:
+    def residue_plot_name(chain, order: int, name: str, ext: str = "png") -> str:
         """Zero-padded residue number first, so files sort in sequence order."""
-        return f"{sanitize_chain_id(chain)}_{int(order):04d}_{name}.png"
+        return f"{sanitize_chain_id(chain)}_{int(order):04d}_{name}.{ext}"
 
     def _plot_chosen_residues(self, result: AnalysisResult, plots_dir: Path) -> None:
         summary = result.residue_summary_df
@@ -264,7 +265,8 @@ class OutputWriter:
                     )
             self.residue_plotter.plot(
                 points[(points["chain"] == chain) & (points["order"] == order)],
-                plots_dir / self.residue_plot_name(chain, order, residue["name"]),
+                plots_dir
+                / self.residue_plot_name(chain, order, residue["name"], self.config.plot_format),
                 dmax=residue["dmax"],
                 reference=reference_point,
             )
@@ -274,4 +276,6 @@ class OutputWriter:
             ["chain", "range_label"], dropna=False
         ):
             stem = f"{sanitize_chain_id(chain)}_{str(range_label).replace('/', '_')}"
-            self.residue_range_cluster_plotter.plot(range_cluster_df, plots_dir / f"{stem}.png")
+            self.residue_range_cluster_plotter.plot(
+                range_cluster_df, plots_dir / f"{stem}.{self.config.plot_format}"
+            )

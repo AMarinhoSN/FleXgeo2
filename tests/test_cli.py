@@ -43,6 +43,8 @@ def test_build_config_maps_cli_flags() -> None:
             "10,A:11",
             "--plot-residues",
             "12-13",
+            "--plot-format",
+            "svg",
         ]
     )
 
@@ -52,6 +54,7 @@ def test_build_config_maps_cli_flags() -> None:
     assert config.output.output_dir == Path("out")
     assert config.output.distance_matrices is True
     assert config.output.plot_residues == ["10,A:11", "12-13"]
+    assert config.output.plot_format == "svg"
     assert config.output.write_files is True
     assert config.output.overwrite is True
     assert config.chains == ["A", "B"]
@@ -109,6 +112,7 @@ def test_removed_output_verbose_points_to_its_replacements(capsys) -> None:
 @pytest.mark.parametrize(
     "arguments",
     [
+        ["--plot-format", "jpg"],
         ["--cluster-min-size", "1"],
         ["--cluster-min-samples", "0"],
         ["--max-models-in-plot", "-1"],

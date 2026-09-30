@@ -211,3 +211,10 @@ def test_validate_against_structure_checks_residue_plot_selections(
 
     with pytest.raises(ValueError, match=message):
         validate_against_structure(config, info)
+
+
+def test_validate_config_rejects_unknown_plot_format(pdb_file: Path) -> None:
+    config = AnalysisConfig(pdb_file=pdb_file, output=OutputConfig(plot_format="jpg"))
+
+    with pytest.raises(ValueError, match="Plot format must be one of png, pdf, svg, not 'jpg'"):
+        validate_config(config)

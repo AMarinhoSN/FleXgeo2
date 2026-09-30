@@ -135,6 +135,12 @@ flexgeo2 path/to/ensemble.pdb --cluster-residues --plot-residues 45,A:50-52
 
 A residue number without a chain applies to every analysed chain that has it.
 
+Figures are PNG by default. For publication, write them as vector PDF or SVG, with text that stays editable in Illustrator or Inkscape:
+
+```bash
+flexgeo2 path/to/ensemble.pdb --plot-format pdf
+```
+
 To hide individual model overlays:
 
 ```bash
@@ -218,6 +224,8 @@ results/
     ├── ranges.csv               # per range: number of clusters, noise fraction
     └── <chain>_<start-end>.png
 ```
+
+Figures use the extension of `--plot-format` (`png` by default, `pdf` or `svg`).
 
 All tables are in long ("tidy") format with a `chain` column, so a single chain can be
 selected by filtering that column.

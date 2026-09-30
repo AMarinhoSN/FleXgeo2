@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
 
+from flexgeo2.config import PLOT_FORMATS
 from flexgeo2.models import AnalysisResult
 
 PACKAGES = ("FleXgeo2", "melodia-py", "biopython", "numpy", "pandas", "hdbscan", "matplotlib")
@@ -76,6 +77,7 @@ class OutputFile:
     columns: dict[str, str] = field(default_factory=dict)
 
 
+# Figure entries use "{ext}" for the plot format; see file_guide().
 FILE_GUIDE: tuple[OutputFile, ...] = (
     OutputFile("README.md", "README.md", "This guide."),
     OutputFile(
@@ -84,8 +86,8 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         "Parameters, package versions, input checksums and the list of files written.",
     ),
     OutputFile(
-        "overview.png",
-        "overview.png",
+        "overview.{ext}",
+        "overview.{ext}",
         "Per-residue results along the sequence, one panel each: curvature and torsion "
         "(ensemble mean +/- standard deviation, with individual model traces), dmax, and, "
         "when those analyses ran, clusters per residue and the mean distance to the "
@@ -162,8 +164,8 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         },
     ),
     OutputFile(
-        "reference/heatmap.png",
-        "reference/heatmap.png",
+        "reference/heatmap.{ext}",
+        "reference/heatmap.{ext}",
         "Distance to the reference for every model (x) and residue (y).",
     ),
     OutputFile(
@@ -195,8 +197,8 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         },
     ),
     OutputFile(
-        "clusters/clusters.png",
-        "clusters/clusters.png",
+        "clusters/clusters.{ext}",
+        "clusters/clusters.{ext}",
         "Cluster of every model (rows) at every residue (columns); grey is noise. The bars "
         "above show the number of clusters per residue. Labels are assigned independently "
         "at each residue, so cluster 0 at one residue is unrelated to cluster 0 at another.",
@@ -228,31 +230,52 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         },
     ),
     OutputFile(
-        "residue_plots/*.png",
-        "residue_plots/<chain>_<residue number>_<name>.png",
+        "residue_plots/*.{ext}",
+        "residue_plots/<chain>_<residue number>_<name>.{ext}",
         "Curvature vs torsion of each residue chosen with --plot-residues, one point per "
         "model. Points are coloured by cluster when per-residue clustering ran, and the "
         "reference is marked with a star when one was given. The title gives the residue's "
         "dmax.",
     ),
     OutputFile(
-        "range_clusters/*.png",
-        "range_clusters/<chain>_<start-end>.png",
+        "range_clusters/*.{ext}",
+        "range_clusters/<chain>_<start-end>.{ext}",
         "Models projected on the first two principal components, coloured by cluster.",
     ),
 )
 
 
-def written_files(output_dir: Path) -> list[str]:
-    """Relative paths of files matched by the guide (plus README.md and run.json)."""
-    found = set()
-    for entry in FILE_GUIDE:
-        found.update(
-            path.relative_to(output_dir).as_posix()
-            for path in output_dir.glob(entry.pattern)
-            if path.is_file()
+def file_guide(plot_format: str = "png") -> tuple[OutputFile, ...]:
+    """The file guide with figure names in ``plot_format``."""
+    return tuple(
+        dataclasses.replace(
+            entry,
+            pattern=entry.pattern.replace("{ext}", plot_format),
+            display=entry.display.replace("{ext}", plot_format),
         )
+        for entry in FILE_GUIDE
+    )
+
+
+def written_files(output_dir: Path) -> list[str]:
+    """Relative paths of files matched by the guide (plus README.md and run.json).
+
+    Figures are matched in every plot format, so an earlier run's figures are found
+    even when it used another format.
+    """
+    found = set()
+    for plot_format in PLOT_FORMATS:
+        for entry in file_guide(plot_format):
+            found.update(
+                path.relative_to(output_dir).as_posix()
+                for path in output_dir.glob(entry.pattern)
+                if path.is_file()
+            )
     return sorted(found | {"README.md", "run.json"})
+
+
+def _plot_format(result: AnalysisResult) -> str:
+    return result.config.output.plot_format if result.config is not None else "png"
 
 
 def sha256(path: Path) -> str:
@@ -413,7 +436,10 @@ def _key_results(result: AnalysisResult, top: int = 5) -> list[str]:
             more = f", and {len(split) - 10} more" if len(split) > 10 else ""
             lines.append(f"- Residues with most clusters: {shown}{more}.")
         lines.append(f"- {all_noise} residues have every conformation labelled as noise.")
-        lines.append("- Map of every model's cluster at every residue: `clusters/clusters.png`.")
+        lines.append(
+            "- Map of every model's cluster at every residue: "
+            f"`clusters/clusters.{_plot_format(result)}`."
+        )
 
     if result.residue_range_clustering is not None:
         ranges = result.residue_range_clustering.summary_df
@@ -435,9 +461,9 @@ def _key_results(result: AnalysisResult, top: int = 5) -> list[str]:
     return lines
 
 
-def _file_guide(output_dir: Path) -> list[str]:
+def _file_guide(output_dir: Path, plot_format: str) -> list[str]:
     lines = []
-    for entry in FILE_GUIDE:
+    for entry in file_guide(plot_format):
         if entry.pattern not in ("README.md", "run.json") and not any(
             path.is_file() for path in output_dir.glob(entry.pattern)
         ):
@@ -461,7 +487,7 @@ def render_readme(result: AnalysisResult, output_dir: Path, created: datetime) -
         f"`{Path(result.pdb_file).name}`. Parameters, package versions and input checksums "
         "are in `run.json`.",
         "",
-        "Start with `overview.png`, then the key results below.",
+        f"Start with `overview.{_plot_format(result)}`, then the key results below.",
         "",
         "## Input",
         "",
@@ -478,7 +504,7 @@ def render_readme(result: AnalysisResult, output_dir: Path, created: datetime) -
         "",
         "## Files",
         "",
-        *_file_guide(output_dir),
+        *_file_guide(output_dir, _plot_format(result)),
     ]
     return "\n".join(lines).rstrip() + "\n"
 
@@ -529,7 +555,7 @@ def render_terminal_summary(result: AnalysisResult, top: int = 3) -> str:
 
     plots_dir = result.outputs.residue_plots_dir if result.outputs is not None else None
     if plots_dir is not None:
-        n_plots = len(list(plots_dir.glob("*.png")))
+        n_plots = sum(1 for path in plots_dir.iterdir() if path.is_file())
         lines.append(f"Residue plots: {n_plots} in {_display_path(plots_dir)}/")
 
     readme = result.outputs.readme

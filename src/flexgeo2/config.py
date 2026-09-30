@@ -5,6 +5,9 @@ from pathlib import Path
 
 PathLike = str | Path
 
+# File formats for figures; matplotlib picks the writer from the extension.
+PLOT_FORMATS = ("png", "pdf", "svg")
+
 
 @dataclass(slots=True)
 class ReferenceConfig:
@@ -35,6 +38,8 @@ class OutputConfig:
     distance_matrices: bool = False
     # Residues to plot (curvature vs torsion), e.g. ["45", "A:50-52"]; see selection.py.
     plot_residues: list[str] = field(default_factory=list)
+    # File format of every figure: one of PLOT_FORMATS.
+    plot_format: str = "png"
     # Allow writing into a non-empty output_dir, replacing an earlier run's outputs.
     overwrite: bool = False
 

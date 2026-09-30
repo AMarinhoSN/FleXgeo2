@@ -5,7 +5,13 @@ import math
 import sys
 from pathlib import Path
 
-from flexgeo2.config import AnalysisConfig, ClusteringConfig, OutputConfig, ReferenceConfig
+from flexgeo2.config import (
+    PLOT_FORMATS,
+    AnalysisConfig,
+    ClusteringConfig,
+    OutputConfig,
+    ReferenceConfig,
+)
 from flexgeo2.outputs import OutputDirectoryNotEmptyError
 from flexgeo2.pipeline import FlexGeo2App
 from flexgeo2.report import render_terminal_summary
@@ -157,6 +163,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--plot-format",
+        choices=PLOT_FORMATS,
+        default="png",
+        help=(
+            "File format of every figure. pdf and svg are vector formats with editable "
+            "text, for publication. Default: png"
+        ),
+    )
+    parser.add_argument(
         "--distance-matrices",
         action="store_true",
         help=(
@@ -189,6 +204,7 @@ def build_config(args: argparse.Namespace) -> AnalysisConfig:
         output_dir=args.output_dir,
         distance_matrices=args.distance_matrices,
         plot_residues=args.plot_residues or [],
+        plot_format=args.plot_format,
         write_files=True,
         overwrite=args.overwrite,
     )

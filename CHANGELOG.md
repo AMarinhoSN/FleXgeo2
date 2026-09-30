@@ -68,6 +68,9 @@ model numbers, so results and scripts written for it need updating: see
 - `clusters/clusters.png`: the cluster of every model at every residue, with the number
   of clusters per residue above it.
 - `--distance-matrices` and `--overwrite` options.
+- `--plot-format png|pdf|svg` (`OutputConfig.plot_format`): the file format of every
+  figure. PDF embeds TrueType fonts and SVG keeps text as text, so vector figures can
+  be edited.
 - `--plot-residues` (`OutputConfig.plot_residues`): curvature vs torsion plots for chosen
   residues (`45`, `45-50`, `A:45`, `A:45-50`, comma-separated), written to
   `residue_plots/`. Points are coloured by cluster when per-residue clustering ran, the
