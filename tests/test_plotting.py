@@ -160,17 +160,11 @@ def legend_labels(figure: Figure) -> list[str]:
     return [text.get_text() for text in figure.axes[0].get_legend().get_texts()]
 
 
-@pytest.mark.parametrize(
-    "plotter",
-    ["chain", "overview", "heatmap", "range_cluster", "cluster_map", "residue"],
-)
-def test_every_plotter_writes_a_readable_png(
-    plotter: str,
-    normalized_geometry_df: pd.DataFrame,
-    distance_long_df: pd.DataFrame,
-    tmp_path,
-) -> None:
-    output = tmp_path / f"{plotter}.png"
+PLOTTERS = ["chain", "overview", "heatmap", "range_cluster", "cluster_map", "residue"]
+
+
+def plot_with(plotter: str, output, normalized_geometry_df, distance_long_df) -> None:
+    """Draw and save one plotter's figure from small example data."""
     chain_raw_df, chain_summary_df = chain_frames(normalized_geometry_df)
     map_summary, map_assignments = cluster_map_frames({1: [0, 0, 1], 2: [-1, 0, 0]})
     overview_summary = GeometryService().summarize(normalized_geometry_df)
@@ -194,12 +188,63 @@ def test_every_plotter_writes_a_readable_png(
             residue_points([0, 1, 1, -1]), output, dmax=0.5, reference=(0.2, 0.0)
         ),
     }
-
     calls[plotter]()
+
+
+@pytest.mark.parametrize("plotter", PLOTTERS)
+def test_every_plotter_writes_a_readable_png(
+    plotter: str,
+    normalized_geometry_df: pd.DataFrame,
+    distance_long_df: pd.DataFrame,
+    tmp_path,
+) -> None:
+    output = tmp_path / f"{plotter}.png"
+
+    plot_with(plotter, output, normalized_geometry_df, distance_long_df)
 
     assert output.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
     height, width, _ = plt.imread(output).shape
     assert height > 100 and width > 100
+
+
+# Settings a user may have in their own session, all different from the FleXgeo2 style.
+USER_RC = {"pdf.fonttype": 3, "axes.titleweight": "normal", "axes.grid": False}
+
+
+@pytest.mark.parametrize("plotter", PLOTTERS)
+def test_every_plotter_uses_its_style_without_changing_the_callers(
+    plotter: str,
+    normalized_geometry_df: pd.DataFrame,
+    distance_long_df: pd.DataFrame,
+    saved_figures: list[Figure],
+    tmp_path,
+) -> None:
+    output = tmp_path / f"{plotter}.pdf"
+
+    with plt.rc_context(USER_RC):
+        user_settings = dict(plt.rcParams)
+        plot_with(plotter, output, normalized_geometry_df, distance_long_df)
+        assert dict(plt.rcParams) == user_settings
+
+    pdf = output.read_bytes()
+    assert b"/FontFile2" in pdf  # TrueType, from the style rather than the session
+    assert b"/Type3" not in pdf
+    [figure] = saved_figures
+    titles = [axis.title for axis in figure.axes if axis.get_title()]
+    assert titles
+    assert all(title.get_fontweight() == "bold" for title in titles)
+
+
+def test_render_uses_the_style_without_changing_the_callers(
+    distance_long_df: pd.DataFrame,
+) -> None:
+    with plt.rc_context(USER_RC):
+        user_settings = dict(plt.rcParams)
+        figure = DistanceHeatmapPlotter().render(distance_long_df, "title")
+        assert dict(plt.rcParams) == user_settings
+
+    assert figure.axes[0].title.get_fontweight() == "bold"
+    plt.close(figure)
 
 
 @pytest.mark.parametrize(

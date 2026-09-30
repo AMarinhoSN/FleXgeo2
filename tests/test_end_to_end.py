@@ -262,3 +262,16 @@ def test_save_refuses_a_folder_with_files_unless_overwriting(
 
     assert (folder / "notes.txt").read_text() == "keep me"
     assert (folder / "README.md").is_file()
+
+
+def test_run_and_save_leave_the_callers_matplotlib_settings_alone(
+    mini_ensemble_pdb: Path, tmp_path: Path
+) -> None:
+    import matplotlib.pyplot as plt
+
+    with plt.rc_context({"axes.titleweight": "normal", "pdf.fonttype": 3}):
+        user_settings = dict(plt.rcParams)
+        result = FlexGeo2App().run(saving_config(mini_ensemble_pdb, tmp_path / "run"))
+        assert dict(plt.rcParams) == user_settings
+        result.save(tmp_path / "saved")
+        assert dict(plt.rcParams) == user_settings

@@ -73,6 +73,7 @@ model numbers, so results and scripts written for it need updating: see
     `run_manifest`, `cluster_map_plot`, `residue_plots_dir` and `per_chain_plots` are
     new. With more than 4 chains, `overview_plot`, `distance_heatmap` and
     `cluster_map_plot` are `None` and `per_chain_plots` lists the per-chain figures.
+  - `PlotStyle.apply()` is replaced by the `PlotStyle.context()` context manager.
   - `GeometryService.ensure_dependencies()` is removed. It ended the Python session
     with `SystemExit` when a dependency was missing; a missing dependency now raises
     the usual `ModuleNotFoundError`, and the CLI reports it in one line. A custom
@@ -133,6 +134,11 @@ model numbers, so results and scripts written for it need updating: see
 
 ### Fixed
 
+- `FlexGeo2App().run()` and `AnalysisResult.save()` changed matplotlib's global
+  settings (grid, fonts, colours, PDF font type) for the rest of the Python session,
+  so a notebook's own figures changed look after a run. The FleXgeo2 style now
+  applies only while FleXgeo2 draws and saves its figures, and a figure from a
+  plotter's `render()` looks the same whether or not a run came first.
 - Chain IDs that differ only by case (`A` and `a`, used by large assemblies) wrote
   per-chain files with the same name on macOS and Windows, so one chain's matrix or plot
   overwrote the other's. The chain that is not upper case now gets a `_lower` suffix

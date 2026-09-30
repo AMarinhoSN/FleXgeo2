@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 
 from flexgeo2.distances import DistanceService
@@ -112,30 +113,45 @@ def _round_step(span: int, max_ticks: int) -> int:
 
 
 class PlotStyle:
-    """Global matplotlib styling for FleXgeo2 plots."""
+    """Matplotlib style of FleXgeo2 figures, applied only while they are drawn and saved.
 
-    @staticmethod
-    def apply() -> None:
+    The style is not set globally, so a run leaves the caller's own matplotlib settings
+    as they were, and a figure looks the same whether or not a run came first.
+    """
+
+    BASE = "seaborn-v0_8-whitegrid"
+    RC = {
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
+        "axes.edgecolor": "#c7c7c7",
+        "axes.titleweight": "bold",
+        "axes.labelsize": 11,
+        "axes.titlesize": 13,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "legend.frameon": False,
+        # Vector figures stay editable: TrueType fonts in PDF (journals often
+        # reject matplotlib's default Type 3), real text rather than paths in SVG.
+        "pdf.fonttype": 42,
+        "svg.fonttype": "none",
+    }
+
+    @classmethod
+    def context(cls):
         import matplotlib.pyplot as plt
 
-        plt.style.use("seaborn-v0_8-whitegrid")
-        plt.rcParams.update(
-            {
-                "figure.facecolor": "white",
-                "axes.facecolor": "white",
-                "axes.edgecolor": "#c7c7c7",
-                "axes.titleweight": "bold",
-                "axes.labelsize": 11,
-                "axes.titlesize": 13,
-                "xtick.labelsize": 9,
-                "ytick.labelsize": 9,
-                "legend.frameon": False,
-                # Vector figures stay editable: TrueType fonts in PDF (journals often
-                # reject matplotlib's default Type 3), real text rather than paths in SVG.
-                "pdf.fonttype": 42,
-                "svg.fonttype": "none",
-            }
-        )
+        return plt.style.context([cls.BASE, cls.RC])
+
+
+def styled(method):
+    """Draw (and save) a plotter method's figure in the FleXgeo2 style."""
+
+    @functools.wraps(method)
+    def wrapper(*args, **kwargs):
+        with PlotStyle.context():
+            return method(*args, **kwargs)
+
+    return wrapper
 
 
 class BasePlotter:
@@ -168,6 +184,7 @@ class BasePlotter:
 
 
 class ChainGeometryPlotter(BasePlotter):
+    @styled
     def plot(
         self,
         chain_raw_df,
@@ -250,6 +267,7 @@ class OverviewPlotter(BasePlotter):
         "distance": 1.6,
     }
 
+    @styled
     def plot(
         self,
         summary_df,
@@ -273,6 +291,7 @@ class OverviewPlotter(BasePlotter):
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
+    @styled
     def render(
         self,
         summary_df,
@@ -395,6 +414,7 @@ class DistanceHeatmapPlotter:
     # of the map is black; the larger values share the top colour.
     COLOR_PERCENTILE = 99
 
+    @styled
     def plot(self, distance_long_df, output_path: str | Path, title: str) -> None:
         import matplotlib.pyplot as plt
 
@@ -402,6 +422,7 @@ class DistanceHeatmapPlotter:
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
+    @styled
     def render(self, distance_long_df, title: str):
         import matplotlib.pyplot as plt
         import numpy as np
@@ -478,6 +499,7 @@ class ClusterMapPlotter(BasePlotter):
 
     MISSING_COLOR = "white"
 
+    @styled
     def plot(self, summary_df, output_path: str | Path, assignments_df) -> None:
         import matplotlib.pyplot as plt
 
@@ -485,6 +507,7 @@ class ClusterMapPlotter(BasePlotter):
         fig.savefig(output_path, dpi=300, bbox_inches="tight")
         plt.close(fig)
 
+    @styled
     def render(self, summary_df, assignments_df):
         import matplotlib.pyplot as plt
         import numpy as np
@@ -566,6 +589,7 @@ class ResiduePlotter:
     reference state is marked when ``reference`` (curvature, torsion) is given.
     """
 
+    @styled
     def plot(self, residue_df, output_path: str | Path, dmax=None, reference=None) -> None:
         import matplotlib.pyplot as plt
 
@@ -573,6 +597,7 @@ class ResiduePlotter:
         fig.savefig(output_path, dpi=250, bbox_inches="tight")
         plt.close(fig)
 
+    @styled
     def render(self, residue_df, dmax=None, reference=None):
         import matplotlib.pyplot as plt
 
@@ -626,6 +651,7 @@ class ResiduePlotter:
 
 
 class ResidueRangeClusterPlotter:
+    @styled
     def plot(self, range_cluster_df, output_path: str | Path) -> None:
         import matplotlib.pyplot as plt
 

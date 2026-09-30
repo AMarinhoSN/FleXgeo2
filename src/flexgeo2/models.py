@@ -71,14 +71,12 @@ class AnalysisResult:
         ``overwrite`` is true. Returns the paths written, also kept in ``outputs``.
         """
         from flexgeo2.outputs import OutputWriter, check_output_dir
-        from flexgeo2.plotting import PlotStyle
 
         config = self.config or AnalysisConfig(pdb_file=self.pdb_file)
         output = replace(config.output, output_dir=output_dir, overwrite=overwrite)
         check_output_dir(output)
         # run.json and README.md describe the configuration the files were written with.
         self.config = replace(config, output=output)
-        PlotStyle.apply()
         self.outputs = OutputWriter(output).write(
             self,
             max_models_in_plot=config.max_models_in_plot,

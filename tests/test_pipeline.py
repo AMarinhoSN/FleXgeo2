@@ -183,7 +183,6 @@ class FakeOutputWriter:
 
 @pytest.fixture(autouse=True)
 def _isolate_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("flexgeo2.pipeline.PlotStyle.apply", lambda: None)
     FakeOutputWriter.instances = []
 
 

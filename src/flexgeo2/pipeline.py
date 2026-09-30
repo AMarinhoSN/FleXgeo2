@@ -13,7 +13,6 @@ from flexgeo2.models import (
     ResidueRangeClusteringResult,
 )
 from flexgeo2.outputs import OutputWriter
-from flexgeo2.plotting import PlotStyle
 from flexgeo2.validation import validate_against_structure, validate_config
 
 
@@ -33,7 +32,6 @@ class FlexGeo2App:
         self.output_writer_cls = output_writer_cls
 
     def run(self, config: AnalysisConfig) -> AnalysisResult:
-        PlotStyle.apply()
 
         validate_config(config)
         pdb_file = Path(config.pdb_file).resolve()
