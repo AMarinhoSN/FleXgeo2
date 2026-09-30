@@ -3,7 +3,7 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/AMarinhoSN/FleXgeo2/ci.yml?branch=main&label=CI)](https://github.com/AMarinhoSN/FleXgeo2/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-%3E%3D3.10-blue)
-![Version](https://img.shields.io/badge/version-v2.0.0-blue)
+![Version](https://img.shields.io/badge/version-2.0.0.dev0-orange)
 ![Code style](https://img.shields.io/badge/code%20style-ruff-46aef7)
 
 ---
@@ -12,7 +12,12 @@
 
 `FleXgeo2` is a complete refactor of [FleXgeo](https://github.com/AMarinhoSN/FleXgeo), this new version is built around [Melodia_py](https://github.com/rwmontalvao/Melodia_py) to compute differential geometry descriptors from PDB files and generate ensemble-aware curvature and torsion outputs.
 
-`FleXgeo2` can now be used both as a CLI and as a Python library. The high-level library entrypoint is `FlexGeo2App`, and advanced users can also import service classes such as `GeometryService`, `DistanceService`, and `ClusteringService`. Check the [full doccumentation](https://github.com/AMarinhoSN/FleXgeo2/wiki) for more details
+`FleXgeo2` can now be used both as a CLI and as a Python library. The high-level library entrypoint is `FlexGeo2App`, and advanced users can also import service classes such as `GeometryService`, `DistanceService`, and `ClusteringService`. Check the [full documentation](https://github.com/AMarinhoSN/FleXgeo2/wiki) for more details.
+
+> **FleXgeo2 2.0.0 is in development** (version `2.0.0.dev0`). If you used the April 2026
+> preview tagged `v2.0.0`, note that the output folder layout, some options and model
+> numbering have changed since: see [CHANGELOG.md](CHANGELOG.md) for what changed and where
+> each file went.
 
 ---
 
@@ -26,11 +31,11 @@
 - overlays individual model traces to help compare conformers
 - computes per-residue `dmax`, an outlier-trimmed maximum spread in `(curvature, torsion)` space
 - computes per-residue Euclidean distances in `(curvature, torsion)` space to a reference state
-- exports residue-distance matrices and heatmaps
+- plots those distances as a heatmap, and can export them as matrices
 - can cluster conformations residue-by-residue with HDBSCAN in `(curvature, torsion)` space
-- writes one clustering scatter plot per residue
+- maps the cluster of every model at every residue in one figure
 - can cluster conformations using a whole residue range as one combined geometric signature
-- writes separate outputs for each chain
+- writes a `README.md` into every output folder, explaining the results and every file
 
  ---
 
@@ -96,9 +101,18 @@ artifacts = writer.write(
 )
 ```
 
-By default, `FleXgeo2` writes a lean set of summary tables and plots, organised in one folder per analysis (see the output layout below).
+By default, `FleXgeo2` writes a lean set of summary tables and plots, organised in one folder per analysis (see the output layout below), and prints a short summary. For example, `flexgeo2 pdb2lj5.pdb --reference-model 1` prints:
 
-Optional outputs:
+```
+FleXgeo2 analysed pdb2lj5.pdb: 301 models, 1 chain (A), 76 residues.
+
+Most flexible residues (dmax): A LEU71 (2.308), A GLY75 (1.934), A GLY76 (1.934)
+Furthest from input model 1 (mean distance): A LEU71 (1.634), A LEU67 (1.116), A GLY10 (0.764)
+
+Results: results/ (9 files); start with README.md
+```
+
+Common options:
 
 ```bash
 flexgeo2 path/to/ensemble.pdb \
@@ -222,7 +236,7 @@ first, and any other files in the folder are kept.
 - Chains, reference models and residue ranges are validated before Melodia runs, so input mistakes fail fast with a one-line error.
 - `geometry/residues.csv` includes `dmax`. The trimmed extrema used to compute it (`curvature_dmax_min`, `curvature_dmax_max`, `torsion_dmax_min`, `torsion_dmax_max`) and the histogram bin widths are in `AnalysisResult.residue_summary_df` when using FleXgeo2 from Python (see notebook 06).
 - `dmax` trims only sparse extreme histogram bins. The default threshold is `0.01`, meaning only extreme bins with less than 1% of a residue's observations are ignored.
-- The per-chain model summary includes mean absolute deviation from the ensemble mean, which is useful as a first-pass conformational variability signal.
+- The model summaries (`geometry/models.csv`, and `geometry/models_by_chain.csv` for multi-chain input) include the mean absolute deviation from the ensemble mean, which is useful as a first-pass conformational variability signal.
 - Distance matrices use rows for ensemble models and columns for residues, with each cell storing the Euclidean distance to the chosen reference in `(curvature, torsion)` space.
 - Residue clustering treats each residue independently and clusters the ensemble conformations using only that residue's curvature and torsion values.
 - Residue-range clustering concatenates curvature and torsion values across the selected window into one feature vector per conformation, then runs one HDBSCAN solution for that whole region.
