@@ -316,6 +316,38 @@ def _residue(row) -> str:
     return f"{row['chain']} {row['residue_label']}" if row["chain"] else row["residue_label"]
 
 
+def _input_counts(result: AnalysisResult) -> tuple[int, list[str], int]:
+    raw_df = result.raw_df
+    chains = sorted(str(chain) for chain in raw_df["chain"].unique())
+    return int(raw_df["model"].nunique()), chains, int(raw_df.groupby(["chain", "order"]).ngroups)
+
+
+def _most_flexible(result: AnalysisResult, top: int):
+    return result.residue_summary_df.nlargest(top, "dmax")
+
+
+def _furthest_from_reference(result: AnalysisResult, top: int):
+    return result.distance_result.summary_df.nlargest(top, "distance_mean")
+
+
+def _split_residues(result: AnalysisResult):
+    summary = result.residue_clustering.summary_df
+    return summary[summary["n_clusters"] >= 2].sort_values(
+        ["n_clusters", "noise_fraction"], ascending=[False, True]
+    )
+
+
+def _all_noise_ranges(result: AnalysisResult):
+    ranges = result.residue_range_clustering.summary_df
+    return ranges[ranges["n_clusters"] == 0]
+
+
+ALL_NOISE_HINT = (
+    "Ranges with 0 clusters had every conformation labelled as noise; consider a "
+    "smaller `--cluster-min-size`."
+)
+
+
 def _analyses(result: AnalysisResult) -> list[str]:
     config = result.config
     lines = []
@@ -343,14 +375,14 @@ def _analyses(result: AnalysisResult) -> list[str]:
 
 def _key_results(result: AnalysisResult, top: int = 5) -> list[str]:
     lines = ["### Most flexible residues (highest dmax)", ""]
-    flexible = result.residue_summary_df.nlargest(top, "dmax")
+    flexible = _most_flexible(result, top)
     lines += _table(
         ["Residue", "dmax"],
         [[_residue(row), f"{row['dmax']:.3f}"] for _, row in flexible.iterrows()],
     )
 
     if result.distance_result is not None:
-        furthest = result.distance_result.summary_df.nlargest(top, "distance_mean")
+        furthest = _furthest_from_reference(result, top)
         lines += ["", "### Residues furthest from the reference (mean distance)", ""]
         lines += _table(
             ["Residue", "Mean distance"],
@@ -359,9 +391,7 @@ def _key_results(result: AnalysisResult, top: int = 5) -> list[str]:
 
     if result.residue_clustering is not None:
         summary = result.residue_clustering.summary_df
-        split = summary[summary["n_clusters"] >= 2].sort_values(
-            ["n_clusters", "noise_fraction"], ascending=[False, True]
-        )
+        split = _split_residues(result)
         all_noise = int((summary["noise_fraction"] == 1.0).sum())
         lines += ["", "### Per-residue clustering", ""]
         lines.append(f"- {len(split)} of {len(summary)} residues split into two or more clusters.")
@@ -390,12 +420,8 @@ def _key_results(result: AnalysisResult, top: int = 5) -> list[str]:
                 for _, row in ranges.iterrows()
             ],
         )
-        if (ranges["n_clusters"] == 0).any():
-            lines += [
-                "",
-                "Ranges with 0 clusters had every conformation labelled as noise; consider a "
-                "smaller `--cluster-min-size`.",
-            ]
+        if not _all_noise_ranges(result).empty:
+            lines += ["", ALL_NOISE_HINT]
     return lines
 
 
@@ -416,10 +442,7 @@ def _file_guide(output_dir: Path) -> list[str]:
 
 
 def render_readme(result: AnalysisResult, output_dir: Path, created: datetime) -> str:
-    raw_df = result.raw_df
-    chains = sorted(str(chain) for chain in raw_df["chain"].unique())
-    n_models = int(raw_df["model"].nunique())
-    n_residues = int(raw_df.groupby(["chain", "order"]).ngroups)
+    n_models, chains, n_residues = _input_counts(result)
     version = package_versions()["FleXgeo2"] or "unknown"
     lines = [
         "# FleXgeo2 results",
@@ -448,6 +471,61 @@ def render_readme(result: AnalysisResult, output_dir: Path, created: datetime) -
         *_file_guide(output_dir),
     ]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _display_path(path: Path) -> str:
+    """``path`` relative to the working directory when it is inside it."""
+    try:
+        return str(path.relative_to(Path.cwd()))
+    except ValueError:
+        return str(path)
+
+
+def render_terminal_summary(result: AnalysisResult, top: int = 3) -> str:
+    """A few lines for the terminal: what was analysed, headline results, where to look."""
+    n_models, chains, n_residues = _input_counts(result)
+    chain_text = f"{len(chains)} chain{'s' if len(chains) != 1 else ''} ({', '.join(chains)})"
+    lines = [
+        f"FleXgeo2 analysed {Path(result.pdb_file).name}: {n_models} models, {chain_text}, "
+        f"{n_residues} residues.",
+        "",
+    ]
+
+    def residues(frame, column) -> str:
+        return ", ".join(f"{_residue(row)} ({row[column]:.3f})" for _, row in frame.iterrows())
+
+    lines.append(f"Most flexible residues (dmax): {residues(_most_flexible(result, top), 'dmax')}")
+    if result.distance_result is not None:
+        furthest = _furthest_from_reference(result, top)
+        lines.append(
+            f"Furthest from {result.distance_result.reference_label} (mean distance): "
+            f"{residues(furthest, 'distance_mean')}"
+        )
+    if result.residue_clustering is not None:
+        n_split = len(_split_residues(result))
+        n_total = len(result.residue_clustering.summary_df)
+        lines.append(
+            f"Per-residue clustering: {n_split} of {n_total} residues split into two or more "
+            "clusters"
+        )
+    if result.residue_range_clustering is not None:
+        for _, row in result.residue_range_clustering.summary_df.iterrows():
+            chain = f"{row['chain']} " if row["chain"] else ""
+            hint = " (try a smaller --cluster-min-size)" if row["n_clusters"] == 0 else ""
+            lines.append(
+                f"Range clustering {chain}{row['range_label']}: {int(row['n_clusters'])} "
+                f"clusters, {row['noise_fraction']:.0%} noise{hint}"
+            )
+
+    readme = result.outputs.readme
+    if readme is not None:
+        output_dir = readme.parent
+        n_files = len(written_files(output_dir))
+        lines += [
+            "",
+            f"Results: {_display_path(output_dir)}/ ({n_files} files); start with README.md",
+        ]
+    return "\n".join(lines)
 
 
 def write_report(result: AnalysisResult, output_dir: Path) -> tuple[Path, Path]:

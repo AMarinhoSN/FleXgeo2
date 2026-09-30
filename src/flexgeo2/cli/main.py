@@ -8,6 +8,7 @@ from pathlib import Path
 from flexgeo2.config import AnalysisConfig, ClusteringConfig, OutputConfig, ReferenceConfig
 from flexgeo2.outputs import OutputDirectoryNotEmptyError
 from flexgeo2.pipeline import FlexGeo2App
+from flexgeo2.report import render_terminal_summary
 
 
 def fraction_in_unit_interval(value: str) -> float:
@@ -194,39 +195,7 @@ def build_config(args: argparse.Namespace) -> AnalysisConfig:
 
 
 def print_run_summary(result) -> None:
-    model_count = int(result.raw_df["model"].nunique())
-    chain_count = int(result.raw_df["chain"].nunique())
-    residue_count = int(result.raw_df.groupby(["chain", "order"]).ngroups)
-    outputs = result.outputs
-
-    print(f"Processed: {result.pdb_file}")
-    print(f"Models: {model_count}")
-    print(f"Chains: {chain_count}")
-    print(f"Residues: {residue_count}")
-    print(f"Guide to the outputs: {outputs.readme}")
-    print(f"Raw descriptors: {outputs.raw_csv}")
-    print(f"Residue summary: {outputs.residue_summary_csv}")
-    print(f"Overall model summary: {outputs.overall_model_summary_csv}")
-    print(f"Overview plot: {outputs.overview_plot}")
-    if outputs.model_summary_csv is not None:
-        print(f"Model summary by chain: {outputs.model_summary_csv}")
-    if outputs.distance_summary_csv is not None:
-        print(f"Distance summary: {outputs.distance_summary_csv}")
-        print(f"Distance heatmap: {outputs.distance_heatmap}")
-    if outputs.distance_long_csv is not None:
-        print(f"Distance details: {outputs.distance_long_csv}")
-    if outputs.distance_matrix_dir is not None:
-        print(f"Distance matrices by chain: {outputs.distance_matrix_dir}")
-    if outputs.cluster_summary_csv is not None:
-        print(f"Residue cluster summary: {outputs.cluster_summary_csv}")
-        print(f"Residue cluster map: {outputs.cluster_map_plot}")
-    if outputs.cluster_assignments_csv is not None:
-        print(f"Residue cluster assignments: {outputs.cluster_assignments_csv}")
-    if outputs.range_cluster_summary_csv is not None:
-        print(f"Residue-range cluster summary: {outputs.range_cluster_summary_csv}")
-        print(f"Residue-range cluster plots: {outputs.range_cluster_plots_dir}")
-    if outputs.range_cluster_assignments_csv is not None:
-        print(f"Residue-range cluster assignments: {outputs.range_cluster_assignments_csv}")
+    print(render_terminal_summary(result))
 
 
 def parse_args(parser: argparse.ArgumentParser, argv: list[str] | None = None):

@@ -11,7 +11,7 @@ import pytest
 
 from flexgeo2 import AnalysisConfig, ClusteringConfig, FlexGeo2App, OutputConfig
 from flexgeo2.cli.main import main
-from flexgeo2.report import FILE_GUIDE, render_readme, written_files
+from flexgeo2.report import FILE_GUIDE, render_readme, render_terminal_summary, written_files
 
 pytest.importorskip("melodia_py")
 
@@ -168,3 +168,78 @@ def test_readme_suggests_smaller_clusters_when_a_range_is_all_noise(tmp_path: Pa
 
     assert "| A | 2-5 | 0 | 1.00 |" in readme
     assert "consider a smaller `--cluster-min-size`" in readme
+
+
+def top_residues(table: pd.DataFrame, column: str) -> str:
+    rows = table.nlargest(3, column)
+    return ", ".join(
+        f"{row['chain']} {row['residue_label']} ({row[column]:.3f})" for _, row in rows.iterrows()
+    )
+
+
+def test_terminal_summary_gives_headline_results_not_file_paths(capsys) -> None:
+    # The working directory is tmp_path (conftest), so "out" is shown relative to it.
+    arguments = [str(MINI_ENSEMBLE), "--output-dir", "out", "--reference-model", "1"]
+    arguments += ["--cluster-residues", "--cluster-residue-range", "2-5"]
+    assert main([*arguments, "--cluster-min-size", "2"]) == 0
+
+    lines = capsys.readouterr().out.splitlines()
+    out = Path("out")
+    residues = pd.read_csv(out / "geometry" / "residues.csv")
+    distances = pd.read_csv(out / "reference" / "residues.csv")
+    clusters = pd.read_csv(out / "clusters" / "residues.csv")
+    [range_row] = pd.read_csv(out / "range_clusters" / "ranges.csv").to_dict("records")
+    n_split = int((clusters["n_clusters"] >= 2).sum())
+    hint = " (try a smaller --cluster-min-size)" if range_row["n_clusters"] == 0 else ""
+
+    assert lines == [
+        "FleXgeo2 analysed mini_ensemble.pdb: 3 models, 1 chain (A), 10 residues.",
+        "",
+        f"Most flexible residues (dmax): {top_residues(residues, 'dmax')}",
+        f"Furthest from input model 1 (mean distance): {top_residues(distances, 'distance_mean')}",
+        f"Per-residue clustering: {n_split} of 10 residues split into two or more clusters",
+        f"Range clustering A 2-5: {range_row['n_clusters']} clusters, "
+        f"{range_row['noise_fraction']:.0%} noise{hint}",
+        "",
+        f"Results: out/ ({len(files_on_disk(out))} files); start with README.md",
+    ]
+
+
+def test_terminal_summary_mentions_only_the_analyses_that_ran(capsys) -> None:
+    assert main([str(MINI_ENSEMBLE), "--output-dir", "out"]) == 0
+
+    output = capsys.readouterr().out
+    assert "Most flexible residues (dmax):" in output
+    for absent in ("Furthest from", "Per-residue clustering", "Range clustering"):
+        assert absent not in output
+
+
+def test_terminal_summary_shows_absolute_path_outside_working_dir(
+    tmp_path_factory: pytest.TempPathFactory, capsys
+) -> None:
+    output_dir = tmp_path_factory.mktemp("elsewhere") / "out"
+    assert main([str(MINI_ENSEMBLE), "--output-dir", str(output_dir)]) == 0
+
+    last_line = capsys.readouterr().out.splitlines()[-1]
+    assert last_line.startswith(f"Results: {output_dir.resolve()}/ (")
+
+
+def test_terminal_summary_hints_at_all_noise_ranges_and_skips_missing_files() -> None:
+    config = AnalysisConfig(
+        pdb_file=MINI_ENSEMBLE,
+        clustering=ClusteringConfig(cluster_residue_ranges=["2-5"], min_cluster_size=5),
+        output=OutputConfig(write_files=False),
+    )
+    result = FlexGeo2App().run(config)
+    # Add a range that did cluster: it must not get the hint.
+    ranges = result.residue_range_clustering.summary_df
+    clustered = ranges.assign(range_label="6-9", n_clusters=2, noise_fraction=0.25)
+    result.residue_range_clustering.summary_df = pd.concat([ranges, clustered])
+
+    lines = render_terminal_summary(result).splitlines()
+
+    assert "Range clustering A 2-5: 0 clusters, 100% noise (try a smaller --cluster-min-size)" in (
+        lines
+    )
+    assert "Range clustering A 6-9: 2 clusters, 25% noise" in lines
+    assert not any(line.startswith("Results:") for line in lines)
