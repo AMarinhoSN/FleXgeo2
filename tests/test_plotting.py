@@ -661,6 +661,32 @@ def test_heatmap_labels_each_chain_with_its_own_residue_numbers() -> None:
     assert set(chain_b) <= set(range(501, 601))
 
 
+@pytest.mark.parametrize(("n_residues", "width"), [(76, 0.8), (400, 0.8), (401, 1.0), (3000, 1.0)])
+def test_residue_bars_touch_on_long_chains(n_residues: int, width: float) -> None:
+    # Gaps between bars alias into stripes on long chains, so bars touch there.
+    summary = pd.DataFrame(
+        {"chain": "A", "order": range(1, n_residues + 1), "n_clusters": 2}
+    ).assign(
+        residue_label=lambda df: "ALA" + df["order"].astype(str),
+        curvature_mean=0.3,
+        curvature_std=0.05,
+        torsion_mean=0.1,
+        torsion_std=0.05,
+        dmax=0.2,
+    )
+    overview = OverviewPlotter().render(summary, cluster_summary_df=summary)
+    cluster_map, _, _ = residue_axis_figure("cluster_map", list(range(1, n_residues + 1)))
+    try:
+        _, _, dmax_axis, clusters_axis = overview.axes
+        strip_axis = cluster_map.axes[0]
+        for axis in (dmax_axis, clusters_axis, strip_axis):
+            assert len(axis.patches) == n_residues
+            assert all(bar.get_width() == pytest.approx(width) for bar in axis.patches)
+    finally:
+        plt.close(overview)
+        plt.close(cluster_map)
+
+
 def test_residue_axis_labels_name_the_right_residues_despite_gaps() -> None:
     # Residues 11-29 are missing: image columns are consecutive, labels still name them.
     orders = [*range(1, 11), *range(30, 101)]

@@ -70,6 +70,16 @@ def label_rows(axis, values) -> None:
     axis.set_major_formatter(FuncFormatter(format_row))
 
 
+# Residue bars keep a gap between them up to this many residues per chain. On longer
+# chains the gaps shrink below ~2 px at 300 dpi and alias into stripes, so bars touch.
+MAX_RESIDUES_WITH_BAR_GAPS = 400
+
+
+def residue_bar_width(n_residues: int) -> float:
+    """Width of per-residue bars (1.0 = touching) for a chain of ``n_residues``."""
+    return 0.8 if n_residues <= MAX_RESIDUES_WITH_BAR_GAPS else 1.0
+
+
 def model_axis_height(n_models: int) -> float:
     """Height in inches of a models x residues image, shared by the heatmap and cluster map."""
     return min(6.0, max(2.0, 0.12 * n_models))
@@ -307,13 +317,14 @@ class OverviewPlotter(BasePlotter):
             axes["curvature"].set_ylabel("Curvature (1/Å)")
             axes["torsion"].set_ylabel("Torsion (1/Å)")
 
-            axes["dmax"].bar(x_values, chain_df["dmax"], width=0.8, color="#6a3d9a")
+            bar_width = residue_bar_width(len(x_values))
+            axes["dmax"].bar(x_values, chain_df["dmax"], width=bar_width, color="#6a3d9a")
             axes["dmax"].set_ylabel("dmax")
 
             if cluster_summary_df is not None:
                 clusters = self._align(chain_df, cluster_summary_df, chain, ["n_clusters"])
                 axes["clusters"].bar(
-                    x_values, clusters["n_clusters"].fillna(0), width=0.8, color="#4c4c4c"
+                    x_values, clusters["n_clusters"].fillna(0), width=bar_width, color="#4c4c4c"
                 )
                 axes["clusters"].set_ylabel("Clusters")
                 axes["clusters"].yaxis.set_major_locator(MaxNLocator(integer=True))
@@ -496,7 +507,12 @@ class ClusterMapPlotter(BasePlotter):
             strip_axis = fig.add_subplot(grid[2 * index])
             map_axis = fig.add_subplot(grid[2 * index + 1], sharex=strip_axis)
 
-            strip_axis.bar(positions, chain_summary["n_clusters"], width=0.8, color="#4c4c4c")
+            strip_axis.bar(
+                positions,
+                chain_summary["n_clusters"],
+                width=residue_bar_width(len(positions)),
+                color="#4c4c4c",
+            )
             strip_axis.set_ylabel("Clusters")
             strip_axis.yaxis.set_major_locator(MaxNLocator(integer=True))
             strip_axis.tick_params(labelbottom=False)
