@@ -69,9 +69,26 @@ def test_heatmap_residue_axis_follows_sequence_order(distance_long_df: pd.DataFr
     fig = DistanceHeatmapPlotter().render(distance_long_df, "test")
     try:
         axis = fig.axes[0]
-        labels = [tick.get_text() for tick in axis.get_yticklabels()]
+        labels = [tick.get_text() for tick in axis.get_xticklabels()]
         assert labels == ["1", "2", "10"]
         assert not any(line.get_visible() for line in axis.get_xgridlines())
+    finally:
+        plt.close(fig)
+
+
+def test_heatmap_puts_residues_along_x_and_models_down_y(
+    distance_long_df: pd.DataFrame,
+) -> None:
+    # Like the cluster map: one row per model (first model at the top), one column per
+    # residue in sequence order. The fixture's distance is model x residue number.
+    fig = DistanceHeatmapPlotter().render(distance_long_df, "test")
+    try:
+        axis = fig.axes[0]
+        image = axis.get_images()[0].get_array()
+        assert image.tolist() == [[1.0, 2.0, 10.0], [2.0, 4.0, 20.0]]
+        assert axis.yaxis_inverted()
+        assert (axis.get_xlabel(), axis.get_ylabel()) == ("Residue", "Model")
+        assert [tick.get_text() for tick in axis.get_yticklabels()] == ["1", "2"]
     finally:
         plt.close(fig)
 
@@ -362,6 +379,31 @@ def heatmap_scales(fig: Figure) -> list[tuple[float, float, str]]:
     return [(image.norm.vmin, image.norm.vmax, image.colorbar.extend) for image in images]
 
 
+def test_heatmap_height_follows_models_and_chains() -> None:
+    def height(n_models: int, chains: str = "A") -> float:
+        distances = pd.DataFrame(
+            [
+                {
+                    "chain": chain,
+                    "model": model,
+                    "order": order,
+                    "residue_label": f"ALA{order}",
+                    "distance_to_reference": 0.1,
+                }
+                for chain in chains
+                for model in range(1, n_models + 1)
+                for order in range(1, 11)
+            ]
+        )
+        fig = DistanceHeatmapPlotter().render(distances, "title")
+        plt.close(fig)
+        return fig.get_size_inches()[1]
+
+    # Like the cluster map: taller with more models up to a cap, one panel per chain.
+    assert height(3) < height(30) < height(50) == height(500)
+    assert height(20, "AB") > height(20, "A")
+
+
 def test_heatmap_colour_scale_ignores_rare_large_distances() -> None:
     distances = spiky_distances()
 
@@ -524,11 +566,15 @@ def assert_round_and_apart(labels: list, which: str) -> list[int]:
     return texts
 
 
+@pytest.mark.parametrize("figure", ["cluster_map", "heatmap"])
 @pytest.mark.parametrize("n_models", [3, 10, 16, 20, 50, 500])
-def test_cluster_map_model_labels_do_not_overlap(n_models: int) -> None:
+def test_model_labels_do_not_overlap(figure: str, n_models: int) -> None:
     summary, assignments = cluster_map_frames({1: [0] * n_models, 2: [1] * n_models})
-
-    labels = drawn_model_labels(summary, assignments)
+    if figure == "cluster_map":
+        labels = drawn_model_labels(summary, assignments)
+    else:
+        distances = assignments.assign(distance_to_reference=0.1 * assignments["model"])
+        labels = drawn_labels(DistanceHeatmapPlotter().render(distances, "title"), 0, "y")
 
     texts = assert_round_and_apart(labels, "y")
     assert set(texts) <= set(range(1, n_models + 1))
@@ -566,7 +612,7 @@ def residue_axis_figure(kind: str, orders: list[int]) -> tuple[Figure, int, str]
             for order in orders
         ]
     )
-    return DistanceHeatmapPlotter().render(distances, "title"), 0, "y"
+    return DistanceHeatmapPlotter().render(distances, "title"), 0, "x"
 
 
 @pytest.mark.parametrize("kind", ["overview", "cluster_map", "heatmap"])
@@ -609,7 +655,7 @@ def test_heatmap_labels_each_chain_with_its_own_residue_numbers() -> None:
     fig = DistanceHeatmapPlotter().render(distances, "title")
 
     # The chain panels come first in fig.axes, then their colour bars.
-    chain_b = [int(text) for text, _ in drawn_labels(fig, 1, "y")]
+    chain_b = [int(text) for text, _ in drawn_labels(fig, 1, "x")]
 
     assert chain_b
     assert set(chain_b) <= set(range(501, 601))

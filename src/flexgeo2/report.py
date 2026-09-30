@@ -166,9 +166,9 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
     OutputFile(
         "reference/heatmap.{ext}",
         "reference/heatmap.{ext}",
-        "Distance to the reference for every model (x) and residue (y). The colour "
-        "scale ends at the 99th percentile of each chain's distances; larger distances "
-        "share the top colour (arrow on the colour bar).",
+        "Distance to the reference for every residue (x) and model (y), laid out like "
+        "the cluster map. The colour scale ends at the 99th percentile of each chain's "
+        "distances; larger distances share the top colour (arrow on the colour bar).",
     ),
     OutputFile(
         "reference/matrices/*.csv",

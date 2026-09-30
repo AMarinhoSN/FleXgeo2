@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from pathlib import Path
 
 from flexgeo2.distances import DistanceService
@@ -69,6 +68,11 @@ def label_rows(axis, values) -> None:
 
     axis.set_major_locator(RoundValueLocator())
     axis.set_major_formatter(FuncFormatter(format_row))
+
+
+def model_axis_height(n_models: int) -> float:
+    """Height in inches of a models x residues image, shared by the heatmap and cluster map."""
+    return min(6.0, max(2.0, 0.12 * n_models))
 
 
 def _round_step(span: int, max_ticks: int) -> int:
@@ -391,26 +395,26 @@ class DistanceHeatmapPlotter:
                 )
             matrices[chain] = matrix
 
+        # Laid out like the cluster map: residues along x, models down y (first at top).
+        heights = [model_axis_height(len(matrix.index)) for matrix in matrices.values()]
         fig, axes = plt.subplots(
             nrows=len(matrices),
             ncols=1,
-            figsize=(14, max(4, 3.8 * len(matrices))),
+            figsize=(14, 0.4 + sum(height + 1.0 for height in heights)),
+            height_ratios=heights,
             constrained_layout=True,
+            squeeze=False,
         )
 
-        if len(matrices) == 1:
-            axes = [axes]
-
-        for axis, (chain, matrix) in zip(axes, matrices.items(), strict=True):
+        for axis, (chain, matrix) in zip(axes[:, 0], matrices.items(), strict=True):
             values = matrix.to_numpy(dtype=float)
             # "higher" picks an observed distance, so small matrices are not capped.
             vmax = float(np.nanpercentile(values, self.COLOR_PERCENTILE, method="higher"))
             image = axis.imshow(
-                values.T,
+                values,
                 aspect="auto",
                 cmap="magma",
                 interpolation="nearest",
-                origin="lower",
                 vmin=0,
                 # All distances zero: keep a 0-1 scale (matplotlib would pick -0.1 to 0.1).
                 vmax=vmax if vmax > 0 else 1.0,
@@ -421,23 +425,13 @@ class DistanceHeatmapPlotter:
                 else "Chain: Distance to reference"
             )
             axis.grid(False)
-            axis.set_xlabel("Conformation")
-            axis.set_ylabel("Residue")
-
-            model_labels = [str(model) for model in matrix.index]
-            if model_labels:
-                model_tick_step = max(1, math.ceil(len(model_labels) / 20))
-                model_tick_positions = list(range(0, len(model_labels), model_tick_step))
-                axis.set_xticks(model_tick_positions)
-                axis.set_xticklabels(
-                    [model_labels[index] for index in model_tick_positions],
-                    rotation=45,
-                    ha="right",
-                )
+            axis.set_xlabel("Residue")
+            axis.set_ylabel("Model")
 
             # to_matrix puts residues in sequence order, one column per residue number.
             chain_orders = distance_long_df.loc[distance_long_df["chain"] == chain, "order"]
-            label_rows(axis.yaxis, sorted(chain_orders.unique()))
+            label_rows(axis.xaxis, sorted(chain_orders.unique()))
+            label_rows(axis.yaxis, matrix.index)
 
             fig.colorbar(
                 image,
@@ -474,7 +468,7 @@ class ClusterMapPlotter(BasePlotter):
 
         chains = list(summary_df["chain"].drop_duplicates())
         models = list(assignments_df["model"].drop_duplicates())
-        map_height = min(6.0, max(2.0, 0.12 * len(models)))
+        map_height = model_axis_height(len(models))
         fig = plt.figure(figsize=(14, len(chains) * (map_height + 1.6)), constrained_layout=True)
         grid = fig.add_gridspec(
             nrows=2 * len(chains), ncols=1, height_ratios=[1.2, map_height] * len(chains)

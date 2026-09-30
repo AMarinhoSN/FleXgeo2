@@ -92,6 +92,9 @@ model numbers, so results and scripts written for it need updating: see
   ran, clusters per residue and the mean distance to the reference.
 - A cluster label has the same colour in every plot, from an 18-colour palette that
   keeps grey for noise.
+- The distance heatmap has residues on the x axis and models on the y axis (it was the
+  other way round), matching `overview.png` and `clusters/clusters.png`. Its height
+  follows the number of models, as in the cluster map.
 - Residue axes are labelled with round residue numbers (10, 20, 30, ... or 500, 1000,
   ...) instead of the residue label of every Nth residue (ALA1, ALA18, ALA35, ...).
 - The distance heatmap's colour scale runs from 0 to the 99th percentile of each chain's
