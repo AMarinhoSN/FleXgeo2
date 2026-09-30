@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from flexgeo2.config import AnalysisConfig
@@ -45,6 +45,9 @@ class OutputArtifacts:
     range_cluster_plots_dir: Path | None = None
     readme: Path | None = None
     run_manifest: Path | None = None
+    # Above MAX_CHAINS_PER_FIGURE chains, the overview, heatmap and cluster map are
+    # written per chain (overview_A.png, ...): listed here, with the fields above None.
+    per_chain_plots: list[Path] = field(default_factory=list)
 
 
 @dataclass(slots=True)

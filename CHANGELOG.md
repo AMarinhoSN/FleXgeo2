@@ -53,7 +53,9 @@ model numbers, so results and scripts written for it need updating: see
   - `OutputConfig.verbose` is replaced by `OutputConfig.distance_matrices`;
     `OutputConfig.overwrite` is new.
   - `OutputArtifacts`: `chains_dir` and `cluster_plots_dir` are removed; `readme`,
-    `run_manifest`, `cluster_map_plot` and `residue_plots_dir` are new.
+    `run_manifest`, `cluster_map_plot`, `residue_plots_dir` and `per_chain_plots` are
+    new. With more than 4 chains, `overview_plot`, `distance_heatmap` and
+    `cluster_map_plot` are `None` and `per_chain_plots` lists the per-chain figures.
   - `OutputWriter` no longer takes `chain_plotter` or `residue_cluster_plotter`, and
     takes new `cluster_map_plotter` and `residue_plotter` arguments.
     `ResidueClusterPlotter` is replaced by `ResiduePlotter`.
@@ -62,6 +64,9 @@ model numbers, so results and scripts written for it need updating: see
 
 ### Added
 
+- With more than 4 chains, `overview.png`, `reference/heatmap.png` and
+  `clusters/clusters.png` are written one per chain (`overview_A.png`, ...); a single
+  overview for 24 chains would be 231 inches tall.
 - Every output folder has a `README.md` (what ran, key results, and a guide to every file
   and column) and a `run.json` (FleXgeo2 version, parameters, Python and package
   versions, SHA-256 of the input and reference files, list of files written).

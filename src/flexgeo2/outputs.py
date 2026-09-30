@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flexgeo2.config import OutputConfig
+from flexgeo2.config import MAX_CHAINS_PER_FIGURE, OutputConfig
 from flexgeo2.distances import DistanceService
 from flexgeo2.geometry import DMAX_DETAIL_COLUMNS
 from flexgeo2.models import AnalysisResult, OutputArtifacts
@@ -121,6 +121,8 @@ class OutputWriter:
         for directory in (geometry_dir, reference_dir, clusters_dir, range_clusters_dir):
             if directory is not None:
                 directory.mkdir(parents=True, exist_ok=True)
+        chains = list(result.residue_summary_df["chain"].drop_duplicates())
+        per_chain = len(chains) > MAX_CHAINS_PER_FIGURE
 
         artifacts = OutputArtifacts(
             raw_csv=geometry_dir / "descriptors.csv",
@@ -132,10 +134,12 @@ class OutputWriter:
                 else None
             ),
             overall_model_summary_csv=geometry_dir / "models.csv",
-            overview_plot=output_dir / f"overview.{ext}",
+            overview_plot=None if per_chain else output_dir / f"overview.{ext}",
             distance_long_csv=reference_dir / "distances.csv" if reference_dir else None,
             distance_summary_csv=reference_dir / "residues.csv" if reference_dir else None,
-            distance_heatmap=reference_dir / f"heatmap.{ext}" if reference_dir else None,
+            distance_heatmap=(
+                reference_dir / f"heatmap.{ext}" if reference_dir and not per_chain else None
+            ),
             distance_matrix_dir=(
                 reference_dir / "matrices"
                 if reference_dir is not None and self.config.distance_matrices
@@ -143,7 +147,9 @@ class OutputWriter:
             ),
             cluster_assignments_csv=clusters_dir / "assignments.csv" if clusters_dir else None,
             cluster_summary_csv=clusters_dir / "residues.csv" if clusters_dir else None,
-            cluster_map_plot=clusters_dir / f"clusters.{ext}" if clusters_dir else None,
+            cluster_map_plot=(
+                clusters_dir / f"clusters.{ext}" if clusters_dir and not per_chain else None
+            ),
             range_cluster_assignments_csv=(
                 range_clusters_dir / "assignments.csv" if range_clusters_dir else None
             ),
@@ -164,21 +170,26 @@ class OutputWriter:
             artifacts.residue_summary_csv, index=False
         )
         result.overall_model_summary_df.to_csv(artifacts.overall_model_summary_csv, index=False)
-        self.overview_plotter.plot(
-            result.residue_summary_df,
-            artifacts.overview_plot,
-            raw_df=result.raw_df,
-            show_model_traces=not hide_model_traces,
-            max_models_in_plot=max_models_in_plot,
-            cluster_summary_df=(
-                result.residue_clustering.summary_df
-                if result.residue_clustering is not None
-                else None
-            ),
-            distance_summary_df=(
-                result.distance_result.summary_df if result.distance_result is not None else None
-            ),
-        )
+        for figure_chains, path in self._figures(output_dir, "overview", chains, per_chain):
+            self.overview_plotter.plot(
+                _in_chains(result.residue_summary_df, figure_chains),
+                path,
+                raw_df=result.raw_df,
+                show_model_traces=not hide_model_traces,
+                max_models_in_plot=max_models_in_plot,
+                cluster_summary_df=(
+                    result.residue_clustering.summary_df
+                    if result.residue_clustering is not None
+                    else None
+                ),
+                distance_summary_df=(
+                    result.distance_result.summary_df
+                    if result.distance_result is not None
+                    else None
+                ),
+            )
+            if per_chain:
+                artifacts.per_chain_plots.append(path)
 
         if artifacts.model_summary_csv is not None:
             result.model_summary_df.to_csv(artifacts.model_summary_csv, index=False)
@@ -186,11 +197,16 @@ class OutputWriter:
         if result.distance_result is not None:
             result.distance_result.long_df.to_csv(artifacts.distance_long_csv, index=False)
             result.distance_result.summary_df.to_csv(artifacts.distance_summary_csv, index=False)
-            self.distance_plotter.plot(
-                result.distance_result.long_df,
-                artifacts.distance_heatmap,
-                f"Distance to reference: {result.distance_result.reference_label}",
-            )
+            long_df = result.distance_result.long_df
+            compared = list(long_df["chain"].drop_duplicates())
+            for figure_chains, path in self._figures(reference_dir, "heatmap", compared, per_chain):
+                self.distance_plotter.plot(
+                    _in_chains(long_df, figure_chains),
+                    path,
+                    f"Distance to reference: {result.distance_result.reference_label}",
+                )
+                if per_chain:
+                    artifacts.per_chain_plots.append(path)
             if artifacts.distance_matrix_dir is not None:
                 artifacts.distance_matrix_dir.mkdir(parents=True, exist_ok=True)
                 for chain in result.distance_result.long_df["chain"].drop_duplicates():
@@ -207,11 +223,18 @@ class OutputWriter:
                 artifacts.cluster_assignments_csv, index=False
             )
             result.residue_clustering.summary_df.to_csv(artifacts.cluster_summary_csv, index=False)
-            self.cluster_map_plotter.plot(
-                result.residue_clustering.summary_df,
-                artifacts.cluster_map_plot,
-                result.residue_clustering.assignments_df,
-            )
+            clustering = result.residue_clustering
+            clustered = list(clustering.summary_df["chain"].drop_duplicates())
+            for figure_chains, path in self._figures(
+                clusters_dir, "clusters", clustered, per_chain
+            ):
+                self.cluster_map_plotter.plot(
+                    _in_chains(clustering.summary_df, figure_chains),
+                    path,
+                    _in_chains(clustering.assignments_df, figure_chains),
+                )
+                if per_chain:
+                    artifacts.per_chain_plots.append(path)
 
         if result.residue_range_clustering is not None:
             result.residue_range_clustering.assignments_df.to_csv(
@@ -231,6 +254,15 @@ class OutputWriter:
         # Last, so the guide and manifest describe the files that now exist.
         artifacts.readme, artifacts.run_manifest = write_report(result, output_dir)
         return artifacts
+
+    def _figures(self, directory: Path, stem: str, chains: list, per_chain: bool):
+        """``(chains, path)`` of each figure: all chains in one, or one file per chain."""
+        ext = self.config.plot_format
+        if not per_chain:
+            return [(chains, directory / f"{stem}.{ext}")]
+        return [
+            ([chain], directory / f"{stem}_{sanitize_chain_id(chain)}.{ext}") for chain in chains
+        ]
 
     @staticmethod
     def residue_plot_name(chain, order: int, name: str, ext: str = "png") -> str:
@@ -279,3 +311,8 @@ class OutputWriter:
             self.residue_range_cluster_plotter.plot(
                 range_cluster_df, plots_dir / f"{stem}.{self.config.plot_format}"
             )
+
+
+def _in_chains(df, chains: list):
+    """Rows of ``df`` whose chain is one of ``chains``."""
+    return df[df["chain"].isin(chains)]

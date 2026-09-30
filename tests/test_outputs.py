@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 
 import pandas as pd
@@ -141,11 +141,14 @@ def written_files(output_dir: Path) -> set[str]:
 
 
 def artifact_paths(artifacts: OutputArtifacts) -> dict[str, Path]:
-    return {
-        field.name: getattr(artifacts, field.name)
-        for field in fields(artifacts)
-        if getattr(artifacts, field.name) is not None
-    }
+    paths = {}
+    for field in fields(artifacts):
+        value = getattr(artifacts, field.name)
+        if isinstance(value, list):
+            paths.update({f"{field.name}[{index}]": path for index, path in enumerate(value)})
+        elif value is not None:
+            paths[field.name] = value
+    return paths
 
 
 # The fixture has two chains, so the per-chain model summary is written too.
@@ -577,3 +580,95 @@ def test_overwrite_removes_figures_of_an_earlier_run_in_another_format(
         )
 
     assert written_files(tmp_path) == {name.replace(".png", f".{after}") for name in BASE_FILES}
+
+
+def with_chains(result: AnalysisResult, chains: str) -> AnalysisResult:
+    """``result`` with chain A's rows copied as each of ``chains`` (A itself included)."""
+
+    def copied(df: pd.DataFrame) -> pd.DataFrame:
+        chain_a = df[df["chain"] == "A"]
+        return pd.concat([chain_a.assign(chain=chain) for chain in chains], ignore_index=True)
+
+    distances, clustering = result.distance_result, result.residue_clustering
+    return replace(
+        result,
+        raw_df=copied(result.raw_df),
+        residue_summary_df=copied(result.residue_summary_df),
+        model_summary_df=copied(result.model_summary_df),
+        distance_result=replace(
+            distances, long_df=copied(distances.long_df), summary_df=copied(distances.summary_df)
+        ),
+        residue_clustering=replace(
+            clustering,
+            assignments_df=copied(clustering.assignments_df),
+            summary_df=copied(clustering.summary_df),
+        ),
+    )
+
+
+PER_CHAIN_PLOTTERS = {
+    "overview_plotter": "overview",
+    "distance_plotter": "reference/heatmap",
+    "cluster_map_plotter": "clusters/clusters",
+}
+
+
+def plotted_chains(call: dict) -> list[str]:
+    """Chains in every data frame a recorded plot call received."""
+    frames = [arg for arg in call["args"] if isinstance(arg, pd.DataFrame)]
+    return sorted({chain for frame in frames for chain in frame["chain"].unique()})
+
+
+def test_four_chains_share_one_figure(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+) -> None:
+    artifacts = make_writer(tmp_path, plotters).write(
+        with_chains(full_result, "ABCD"), max_models_in_plot=12, hide_model_traces=False
+    )
+
+    for name, stem in PER_CHAIN_PLOTTERS.items():
+        [call] = plotters[name].calls
+        assert call["output_path"] == tmp_path.resolve() / f"{stem}.png"
+        assert plotted_chains(call) == list("ABCD")
+    assert artifacts.per_chain_plots == []
+    assert artifacts.overview_plot == tmp_path.resolve() / "overview.png"
+
+
+def test_more_than_four_chains_get_one_figure_per_chain(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+) -> None:
+    artifacts = make_writer(tmp_path, plotters).write(
+        with_chains(full_result, "ABCDE"), max_models_in_plot=12, hide_model_traces=False
+    )
+
+    expected = []
+    for name, stem in PER_CHAIN_PLOTTERS.items():
+        calls = plotters[name].calls
+        assert [call["output_path"].name for call in calls] == [
+            f"{Path(stem).name}_{chain}.png" for chain in "ABCDE"
+        ]
+        # Each figure gets only its own chain's data.
+        assert [plotted_chains(call) for call in calls] == [[chain] for chain in "ABCDE"]
+        expected += [tmp_path.resolve() / f"{stem}_{chain}.png" for chain in "ABCDE"]
+    assert artifacts.per_chain_plots == expected
+    assert (artifacts.overview_plot, artifacts.distance_heatmap, artifacts.cluster_map_plot) == (
+        None,
+        None,
+        None,
+    )
+
+
+def test_overwrite_removes_per_chain_figures_of_an_earlier_run(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+) -> None:
+    make_writer(tmp_path, plotters).write(
+        with_chains(full_result, "ABCDE"), max_models_in_plot=12, hide_model_traces=False
+    )
+    assert (tmp_path / "overview_E.png").exists()
+
+    # Rerun on the two-chain result: combined figures, no per-chain leftovers.
+    make_writer(tmp_path, plotters, overwrite=True).write(
+        full_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    assert written_files(tmp_path) == FULL_DEFAULT_FILES

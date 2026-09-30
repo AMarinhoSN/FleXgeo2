@@ -18,21 +18,25 @@ pytest.importorskip("melodia_py")
 MINI_ENSEMBLE = Path(__file__).parent / "data" / "mini_ensemble.pdb"
 
 
-@pytest.fixture(scope="module")
-def two_chain_ensemble(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """The three-model fixture with its chain A copied as chain B."""
+def copy_chain_a(path: Path, chains: str) -> Path:
+    """Write the three-model fixture with its chain A copied as each of ``chains``."""
     lines: list[str] = []
     chain_a: list[str] = []
     for line in MINI_ENSEMBLE.read_text().splitlines():
         if line.startswith("ENDMDL"):
-            lines += [f"{atom[:21]}B{atom[22:]}" for atom in chain_a]
+            lines += [f"{atom[:21]}{chain}{atom[22:]}" for chain in chains for atom in chain_a]
             chain_a = []
         if line.startswith("ATOM"):
             chain_a.append(line)
         lines.append(line)
-    path = tmp_path_factory.mktemp("input") / "two_chains.pdb"
     path.write_text("\n".join(lines) + "\n")
     return path
+
+
+@pytest.fixture(scope="module")
+def two_chain_ensemble(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The three-model fixture with its chain A copied as chain B."""
+    return copy_chain_a(tmp_path_factory.mktemp("input") / "two_chains.pdb", "B")
 
 
 @pytest.fixture(scope="module")
@@ -92,13 +96,49 @@ def test_guide_and_manifest_cover_exactly_the_files_written(full_run: Path) -> N
     assert written_files(full_run) == files_on_disk(full_run)
 
 
+PER_CHAIN_FIGURES = {
+    "overview_<chain>.png",
+    "reference/heatmap_<chain>.png",
+    "clusters/clusters_<chain>.png",
+}
+
+
 def test_readme_describes_every_output_that_was_written(full_run: Path) -> None:
     readme = (full_run / "README.md").read_text()
 
     for entry in file_guide("png"):
+        if entry.display in PER_CHAIN_FIGURES:
+            # Two chains share one figure; see the many-chain test below.
+            assert f"`{entry.display}`" not in readme, entry.display
+            continue
         assert f"`{entry.display}`" in readme, entry.display
         for column in entry.columns:
             assert f"`{column}`" in readme, (entry.display, column)
+    assert "Start with `overview.png`" in readme
+
+
+def test_more_than_four_chains_get_one_figure_per_chain(tmp_path: Path) -> None:
+    pdb = copy_chain_a(tmp_path / "five_chains.pdb", "BCDE")
+    output_dir = tmp_path / "out"
+    exit_code = main(
+        [str(pdb), "--output-dir", str(output_dir), "--reference-model", "2"]
+        + ["--cluster-residues", "--cluster-min-size", "2"]
+    )
+    assert exit_code == 0
+
+    figures = [name for name in files_on_disk(output_dir) if name.endswith(".png")]
+    assert figures == sorted(
+        f"{stem}_{chain}.png"
+        for stem in ("overview", "reference/heatmap", "clusters/clusters")
+        for chain in "ABCDE"
+    )
+    readme = (output_dir / "README.md").read_text()
+    assert "Start with `overview_<chain>.png`" in readme
+    for display in PER_CHAIN_FIGURES:
+        assert f"`{display}`" in readme, display
+    for display in ("overview.png", "reference/heatmap.png", "clusters/clusters.png"):
+        assert f"`{display}`" not in readme, display
+    assert written_files(output_dir) == files_on_disk(output_dir)
 
 
 def test_readme_skips_outputs_of_analyses_that_did_not_run(tmp_path: Path) -> None:

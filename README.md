@@ -230,7 +230,7 @@ Figures use the extension of `--plot-format` (`png` by default, `pdf` or `svg`).
 All tables are in long ("tidy") format with a `chain` column, so a single chain can be
 selected by filtering that column.
 
-Two more files are written when they apply:
+Some files are written only when they apply:
 
 - `geometry/models_by_chain.csv`: the per-model summary computed separately per chain,
   when the input has more than one chain
@@ -238,6 +238,9 @@ Two more files are written when they apply:
   `--distance-matrices`
 - `residue_plots/<chain>_<residue number>_<name>.png`: curvature vs torsion of each
   residue chosen with `--plot-residues`
+- `overview_<chain>.png`, `reference/heatmap_<chain>.png` and
+  `clusters/clusters_<chain>.png`: with more than 4 chains, these figures are written
+  one per chain instead of one for all chains, which would be too tall to read
 
 FleXgeo2 will not write into an output folder that already contains files, so results
 from different runs never mix. To rerun into the same folder, add `--overwrite`

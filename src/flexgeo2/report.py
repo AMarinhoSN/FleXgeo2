@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
 
-from flexgeo2.config import PLOT_FORMATS
+from flexgeo2.config import MAX_CHAINS_PER_FIGURE, PLOT_FORMATS
 from flexgeo2.models import AnalysisResult
 
 PACKAGES = ("FleXgeo2", "melodia-py", "biopython", "numpy", "pandas", "hdbscan", "matplotlib")
@@ -77,6 +77,28 @@ class OutputFile:
     columns: dict[str, str] = field(default_factory=dict)
 
 
+_OVERVIEW = (
+    "Per-residue results along the sequence, one panel each: curvature and torsion "
+    "(ensemble mean +/- standard deviation, with individual model traces), dmax, and, "
+    "when those analyses ran, clusters per residue and the mean distance to the "
+    "reference (+/- standard deviation)."
+)
+_HEATMAP = (
+    "Distance to the reference for every residue (x) and model (y), laid out like "
+    "the cluster map. The colour scale ends at the 99th percentile of each chain's "
+    "distances; larger distances share the top colour (arrow on the colour bar)."
+)
+_CLUSTER_MAP = (
+    "Cluster of every model (rows) at every residue (columns); light grey is noise, and "
+    'clusters 18 and above share dark grey ("Other clusters"). The bars above show '
+    "the number of clusters per residue. Labels are assigned independently at each "
+    "residue, so cluster 0 at one residue is unrelated to cluster 0 at another."
+)
+_PER_CHAIN = (
+    f" One file per chain: with more than {MAX_CHAINS_PER_FIGURE} chains, a single figure "
+    "for all of them would be too tall to read."
+)
+
 # Figure entries use "{ext}" for the plot format; see file_guide().
 FILE_GUIDE: tuple[OutputFile, ...] = (
     OutputFile("README.md", "README.md", "This guide."),
@@ -85,14 +107,8 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         "run.json",
         "Parameters, package versions, input checksums and the list of files written.",
     ),
-    OutputFile(
-        "overview.{ext}",
-        "overview.{ext}",
-        "Per-residue results along the sequence, one panel each: curvature and torsion "
-        "(ensemble mean +/- standard deviation, with individual model traces), dmax, and, "
-        "when those analyses ran, clusters per residue and the mean distance to the "
-        "reference (+/- standard deviation).",
-    ),
+    OutputFile("overview.{ext}", "overview.{ext}", _OVERVIEW),
+    OutputFile("overview_*.{ext}", "overview_<chain>.{ext}", _OVERVIEW + _PER_CHAIN),
     OutputFile(
         "geometry/descriptors.csv",
         "geometry/descriptors.csv",
@@ -163,12 +179,9 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
             "models": "Number of models compared at this residue.",
         },
     ),
+    OutputFile("reference/heatmap.{ext}", "reference/heatmap.{ext}", _HEATMAP),
     OutputFile(
-        "reference/heatmap.{ext}",
-        "reference/heatmap.{ext}",
-        "Distance to the reference for every residue (x) and model (y), laid out like "
-        "the cluster map. The colour scale ends at the 99th percentile of each chain's "
-        "distances; larger distances share the top colour (arrow on the colour bar).",
+        "reference/heatmap_*.{ext}", "reference/heatmap_<chain>.{ext}", _HEATMAP + _PER_CHAIN
     ),
     OutputFile(
         "reference/matrices/*.csv",
@@ -198,13 +211,9 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
             "noise_fraction": "Fraction of models labelled as noise.",
         },
     ),
+    OutputFile("clusters/clusters.{ext}", "clusters/clusters.{ext}", _CLUSTER_MAP),
     OutputFile(
-        "clusters/clusters.{ext}",
-        "clusters/clusters.{ext}",
-        "Cluster of every model (rows) at every residue (columns); light grey is noise, and "
-        'clusters 18 and above share dark grey ("Other clusters"). The bars above show '
-        "the number of clusters per residue. Labels are assigned independently at each "
-        "residue, so cluster 0 at one residue is unrelated to cluster 0 at another.",
+        "clusters/clusters_*.{ext}", "clusters/clusters_<chain>.{ext}", _CLUSTER_MAP + _PER_CHAIN
     ),
     OutputFile(
         "range_clusters/assignments.csv",
@@ -279,6 +288,13 @@ def written_files(output_dir: Path) -> list[str]:
 
 def _plot_format(result: AnalysisResult) -> str:
     return result.config.output.plot_format if result.config is not None else "png"
+
+
+def _figure_name(result: AnalysisResult, stem: str) -> str:
+    """File name of a figure with one panel per chain: one file, or one per chain."""
+    _, chains, _ = _input_counts(result)
+    per_chain = "_<chain>" if len(chains) > MAX_CHAINS_PER_FIGURE else ""
+    return f"{stem}{per_chain}.{_plot_format(result)}"
 
 
 def sha256(path: Path) -> str:
@@ -441,7 +457,7 @@ def _key_results(result: AnalysisResult, top: int = 5) -> list[str]:
         lines.append(f"- {all_noise} residues have every conformation labelled as noise.")
         lines.append(
             "- Map of every model's cluster at every residue: "
-            f"`clusters/clusters.{_plot_format(result)}`."
+            f"`clusters/{_figure_name(result, 'clusters')}`."
         )
 
     if result.residue_range_clustering is not None:
@@ -490,7 +506,7 @@ def render_readme(result: AnalysisResult, output_dir: Path, created: datetime) -
         f"`{Path(result.pdb_file).name}`. Parameters, package versions and input checksums "
         "are in `run.json`.",
         "",
-        f"Start with `overview.{_plot_format(result)}`, then the key results below.",
+        f"Start with `{_figure_name(result, 'overview')}`, then the key results below.",
         "",
         "## Input",
         "",

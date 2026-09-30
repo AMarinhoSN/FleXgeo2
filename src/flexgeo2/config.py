@@ -8,6 +8,10 @@ PathLike = str | Path
 # File formats for figures; matplotlib picks the writer from the extension.
 PLOT_FORMATS = ("png", "pdf", "svg")
 
+# The overview, distance heatmap and cluster map stack one panel per chain. Above this
+# many chains they are written as one file per chain instead (e.g. overview_A.png).
+MAX_CHAINS_PER_FIGURE = 4
+
 
 @dataclass(slots=True)
 class ReferenceConfig:
