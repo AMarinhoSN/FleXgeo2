@@ -12,6 +12,7 @@ from matplotlib.figure import Figure
 from flexgeo2.geometry import GeometryService
 from flexgeo2.plotting import (
     NOISE_COLOR,
+    OTHER_CLUSTERS_COLOR,
     ChainGeometryPlotter,
     ClusterMapPlotter,
     DistanceHeatmapPlotter,
@@ -20,6 +21,7 @@ from flexgeo2.plotting import (
     ResidueRangeClusterPlotter,
     _round_step,
     cluster_color,
+    cluster_legend_groups,
     cluster_palette,
 )
 
@@ -781,6 +783,64 @@ def test_cluster_palette_is_distinct_and_avoids_the_noise_grey() -> None:
         assert not (np.isclose(red, green) and np.isclose(green, blue)), color
     assert cluster_color(0) != cluster_color(10)
     assert cluster_color(-1) == NOISE_COLOR
+
+
+N_COLORS = len(cluster_palette())
+OTHER = f"Other clusters ({N_COLORS}+)"
+
+
+def test_clusters_past_the_palette_share_one_colour_and_legend_entry() -> None:
+    palette = cluster_palette()
+
+    assert cluster_color(N_COLORS - 1) == palette[-1]
+    assert cluster_color(N_COLORS) == cluster_color(N_COLORS + 7) == OTHER_CLUSTERS_COLOR
+    other = to_rgba(OTHER_CLUSTERS_COLOR)
+    assert other not in [to_rgba(color) for color in palette]
+    assert other not in (to_rgba(NOISE_COLOR), to_rgba("black"))
+    assert cluster_legend_groups([-1, 0, N_COLORS + 2, N_COLORS - 1, N_COLORS, 0]) == {
+        "Noise": [-1],
+        "Cluster 0": [0],
+        f"Cluster {N_COLORS - 1}": [N_COLORS - 1],
+        OTHER: [N_COLORS, N_COLORS + 2],
+    }
+
+
+def test_scatter_plots_show_other_clusters_once(saved_figures: list[Figure], tmp_path) -> None:
+    ResidueRangeClusterPlotter().plot(range_cluster_df(list(range(25))), tmp_path / "r.png")
+    residue = ResiduePlotter().render(residue_points([0, N_COLORS, N_COLORS + 3, -1]))
+
+    [range_figure] = saved_figures
+    try:
+        assert legend_labels(range_figure) == [f"Cluster {n}" for n in range(N_COLORS)] + [OTHER]
+        other = range_figure.axes[0].collections[-1]
+        assert len(other.get_offsets()) == 25 - N_COLORS
+        assert tuple(other.get_facecolor()[0][:3]) == to_rgba(OTHER_CLUSTERS_COLOR)[:3]
+
+        axis = residue.axes[0]
+        assert [text.get_text() for text in axis.get_legend().get_texts()] == [
+            "Noise",
+            "Cluster 0",
+            OTHER,
+        ]
+        assert len(axis.collections[-1].get_offsets()) == 2
+    finally:
+        plt.close(residue)
+
+
+def test_cluster_map_draws_other_clusters_in_one_colour() -> None:
+    labels = list(range(26)) * 2
+    summary, assignments = cluster_map_frames({1: labels, 2: [0] * len(labels)})
+
+    fig = ClusterMapPlotter().render(summary, assignments)
+    try:
+        legend = [text.get_text() for text in fig.legends[0].get_texts()]
+        assert legend == [f"Cluster {n}" for n in range(N_COLORS)] + [OTHER]
+        image = fig.axes[1].get_images()[0].get_array()
+        for row, label in enumerate(labels):
+            expected = OTHER_CLUSTERS_COLOR if label >= N_COLORS else cluster_color(label)
+            assert tuple(image[row, 0]) == to_rgba(expected), label
+    finally:
+        plt.close(fig)
 
 
 def residue_points(clusters: list[int] | None = None, chain: str = "A") -> pd.DataFrame:

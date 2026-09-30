@@ -91,7 +91,8 @@ model numbers, so results and scripts written for it need updating: see
   curvature and torsion (mean +/- SD with model traces), `dmax`, and, when those analyses
   ran, clusters per residue and the mean distance to the reference.
 - A cluster label has the same colour in every plot, from an 18-colour palette that
-  keeps grey for noise.
+  keeps grey for noise. Clusters 18 and above share dark grey and one "Other clusters
+  (18+)" legend entry, instead of reusing the palette's colours.
 - The distance heatmap has residues on the x axis and models on the y axis (it was the
   other way round), matching `overview.png` and `clusters/clusters.png`. Its height
   follows the number of models, as in the cluster map.

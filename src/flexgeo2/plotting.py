@@ -12,6 +12,10 @@ def sanitize_chain_id(chain) -> str:
 
 
 NOISE_COLOR = "#9e9e9e"
+# Clusters past the end of the palette share this colour and one "Other clusters" entry
+# in legends: dark grey, distinct from the palette, the noise grey and the black
+# reference star.
+OTHER_CLUSTERS_COLOR = "#404040"
 
 
 def cluster_palette() -> list[tuple[float, float, float]]:
@@ -32,11 +36,22 @@ def cluster_color(label):
     if int(label) < 0:
         return NOISE_COLOR
     palette = cluster_palette()
-    return palette[int(label) % len(palette)]
+    return palette[int(label)] if int(label) < len(palette) else OTHER_CLUSTERS_COLOR
 
 
 def cluster_legend_label(label) -> str:
-    return "Noise" if int(label) < 0 else f"Cluster {int(label)}"
+    if int(label) < 0:
+        return "Noise"
+    n_colors = len(cluster_palette())
+    return f"Cluster {int(label)}" if int(label) < n_colors else f"Other clusters ({n_colors}+)"
+
+
+def cluster_legend_groups(labels) -> dict[str, list[int]]:
+    """``{legend entry: cluster labels}`` in label order; one entry for all "other" clusters."""
+    groups: dict[str, list[int]] = {}
+    for label in sorted({int(label) for label in labels}):
+        groups.setdefault(cluster_legend_label(label), []).append(label)
+    return groups
 
 
 def label_rows(axis, values) -> None:
@@ -528,8 +543,8 @@ class ClusterMapPlotter(BasePlotter):
             label_rows(map_axis.yaxis, models)
 
         handles = [
-            Patch(facecolor=cluster_color(label), label=cluster_legend_label(label))
-            for label in sorted(labels_shown)
+            Patch(facecolor=cluster_color(members[0]), label=entry)
+            for entry, members in cluster_legend_groups(labels_shown).items()
         ]
         if any_missing:
             handles.append(
@@ -563,15 +578,15 @@ class ResiduePlotter:
 
         fig, ax = plt.subplots(figsize=(6, 5), constrained_layout=True)
         if "cluster" in residue_df.columns:
-            for label in sorted(residue_df["cluster"].drop_duplicates()):
-                points = residue_df[residue_df["cluster"] == label]
+            for entry, members in cluster_legend_groups(residue_df["cluster"]).items():
+                points = residue_df[residue_df["cluster"].isin(members)]
                 ax.scatter(
                     points["curvature"],
                     points["torsion"],
                     s=36,
                     alpha=0.8,
-                    c=[cluster_color(label)],
-                    label=cluster_legend_label(label),
+                    c=[cluster_color(members[0])],
+                    label=entry,
                     edgecolors="none",
                 )
         else:
@@ -619,17 +634,15 @@ class ResidueRangeClusterPlotter:
         range_label = range_cluster_df["range_label"].iloc[0]
         title_prefix = f"Chain {chain}" if chain not in (None, "") else "Chain"
 
-        unique_clusters = sorted(range_cluster_df["cluster"].drop_duplicates())
-
-        for cluster_label in unique_clusters:
-            cluster_points = range_cluster_df[range_cluster_df["cluster"] == cluster_label]
+        for entry, members in cluster_legend_groups(range_cluster_df["cluster"]).items():
+            cluster_points = range_cluster_df[range_cluster_df["cluster"].isin(members)]
             ax.scatter(
                 cluster_points["pc1"],
                 cluster_points["pc2"],
                 s=48,
                 alpha=0.88,
-                c=[cluster_color(cluster_label)],
-                label=cluster_legend_label(cluster_label),
+                c=[cluster_color(members[0])],
+                label=entry,
                 edgecolors="none",
             )
 

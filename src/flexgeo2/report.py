@@ -201,9 +201,10 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
     OutputFile(
         "clusters/clusters.{ext}",
         "clusters/clusters.{ext}",
-        "Cluster of every model (rows) at every residue (columns); grey is noise. The bars "
-        "above show the number of clusters per residue. Labels are assigned independently "
-        "at each residue, so cluster 0 at one residue is unrelated to cluster 0 at another.",
+        "Cluster of every model (rows) at every residue (columns); light grey is noise, and "
+        'clusters 18 and above share dark grey ("Other clusters"). The bars above show '
+        "the number of clusters per residue. Labels are assigned independently at each "
+        "residue, so cluster 0 at one residue is unrelated to cluster 0 at another.",
     ),
     OutputFile(
         "range_clusters/assignments.csv",
