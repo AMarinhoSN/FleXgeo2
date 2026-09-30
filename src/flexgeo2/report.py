@@ -228,6 +228,14 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         },
     ),
     OutputFile(
+        "residue_plots/*.png",
+        "residue_plots/<chain>_<residue number>_<name>.png",
+        "Curvature vs torsion of each residue chosen with --plot-residues, one point per "
+        "model. Points are coloured by cluster when per-residue clustering ran, and the "
+        "reference is marked with a star when one was given. The title gives the residue's "
+        "dmax.",
+    ),
+    OutputFile(
         "range_clusters/*.png",
         "range_clusters/<chain>_<start-end>.png",
         "Models projected on the first two principal components, coloured by cluster.",
@@ -370,6 +378,8 @@ def _analyses(result: AnalysisResult) -> list[str]:
     if result.residue_range_clustering is not None:
         ranges = ", ".join(result.residue_range_clustering.summary_df["range_label"].unique())
         lines.append(f"- Residue-range clustering of {ranges}{hdbscan}.")
+    if config is not None and config.output.plot_residues:
+        lines.append(f"- Residue plots for {', '.join(config.output.plot_residues)}.")
     return lines
 
 
@@ -516,6 +526,11 @@ def render_terminal_summary(result: AnalysisResult, top: int = 3) -> str:
                 f"Range clustering {chain}{row['range_label']}: {int(row['n_clusters'])} "
                 f"clusters, {row['noise_fraction']:.0%} noise{hint}"
             )
+
+    plots_dir = result.outputs.residue_plots_dir if result.outputs is not None else None
+    if plots_dir is not None:
+        n_plots = len(list(plots_dir.glob("*.png")))
+        lines.append(f"Residue plots: {n_plots} in {_display_path(plots_dir)}/")
 
     readme = result.outputs.readme
     if readme is not None:

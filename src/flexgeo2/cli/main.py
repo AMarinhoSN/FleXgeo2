@@ -146,6 +146,17 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--plot-residues",
+        action="append",
+        dest="plot_residues",
+        metavar="SELECTION",
+        help=(
+            "Plot curvature vs torsion for chosen residues, one point per model, e.g. 45, "
+            "45-50, A:45 or A:45-50 (comma-separated; can be repeated). Points are coloured "
+            "by cluster with --cluster-residues, and the reference is marked when given."
+        ),
+    )
+    parser.add_argument(
         "--distance-matrices",
         action="store_true",
         help=(
@@ -177,6 +188,7 @@ def build_config(args: argparse.Namespace) -> AnalysisConfig:
     output = OutputConfig(
         output_dir=args.output_dir,
         distance_matrices=args.distance_matrices,
+        plot_residues=args.plot_residues or [],
         write_files=True,
         overwrite=args.overwrite,
     )
@@ -204,7 +216,8 @@ def parse_args(parser: argparse.ArgumentParser, argv: list[str] | None = None):
         parser.error(
             "--output-verbose was removed. Distance matrices: --distance-matrices. "
             "geometry/models_by_chain.csv is now written whenever there is more than one "
-            "chain. Per-residue cluster plots are replaced by clusters/clusters.png."
+            "chain. Per-residue cluster plots are replaced by clusters/clusters.png and "
+            "--plot-residues for chosen residues."
         )
     if args.reference_pdb_model is not None and args.reference_pdb is None:
         parser.error("--reference-pdb-model requires --reference-pdb.")

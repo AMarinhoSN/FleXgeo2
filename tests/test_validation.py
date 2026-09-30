@@ -181,3 +181,33 @@ def test_validate_against_structure_rejects_range_outside_selected_chains(
 
     with pytest.raises(ValueError, match="does not match any residues"):
         validate_against_structure(config, structure_info)
+
+
+def test_validate_config_rejects_malformed_residue_plot_selection(pdb_file: Path) -> None:
+    config = AnalysisConfig(pdb_file=pdb_file, output=OutputConfig(plot_residues=["A:x"]))
+
+    with pytest.raises(ValueError, match="Invalid residue selection 'A:x'"):
+        validate_config(config)
+
+
+@pytest.mark.parametrize(
+    ("chains", "selection", "message"),
+    [
+        (None, "8", r"residue\(s\) 8 not found in chain\(s\) A, B"),
+        (["A"], "B:5", "chain 'B' is not among the analysed chains"),
+        (["B"], "3", r"residue\(s\) 3 not found in chain\(s\) B"),
+    ],
+)
+def test_validate_against_structure_checks_residue_plot_selections(
+    pdb_file: Path,
+    chains: list[str] | None,
+    selection: str,
+    message: str,
+) -> None:
+    info = StructureInfo(model_ids=[1, 2], residues_by_chain={"A": {1, 2, 3}, "B": {5, 6}})
+    config = AnalysisConfig(
+        pdb_file=pdb_file, chains=chains, output=OutputConfig(plot_residues=[selection])
+    )
+
+    with pytest.raises(ValueError, match=message):
+        validate_against_structure(config, info)

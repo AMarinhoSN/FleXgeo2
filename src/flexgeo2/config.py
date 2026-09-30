@@ -33,6 +33,8 @@ class OutputConfig:
     write_files: bool = True
     # Also write the distances to the reference as one models x residues CSV per chain.
     distance_matrices: bool = False
+    # Residues to plot (curvature vs torsion), e.g. ["45", "A:50-52"]; see selection.py.
+    plot_residues: list[str] = field(default_factory=list)
     # Allow writing into a non-empty output_dir, replacing an earlier run's outputs.
     overwrite: bool = False
 

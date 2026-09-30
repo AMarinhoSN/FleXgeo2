@@ -475,6 +475,72 @@ class ClusterMapPlotter(BasePlotter):
         return fig
 
 
+class ResiduePlotter:
+    """Curvature vs torsion of one residue, one point per model.
+
+    Points are coloured by cluster when ``residue_df`` has a ``cluster`` column, and the
+    reference state is marked when ``reference`` (curvature, torsion) is given.
+    """
+
+    def plot(self, residue_df, output_path: str | Path, dmax=None, reference=None) -> None:
+        import matplotlib.pyplot as plt
+
+        fig = self.render(residue_df, dmax=dmax, reference=reference)
+        fig.savefig(output_path, dpi=250, bbox_inches="tight")
+        plt.close(fig)
+
+    def render(self, residue_df, dmax=None, reference=None):
+        import matplotlib.pyplot as plt
+
+        fig, ax = plt.subplots(figsize=(6, 5), constrained_layout=True)
+        if "cluster" in residue_df.columns:
+            for label in sorted(residue_df["cluster"].drop_duplicates()):
+                points = residue_df[residue_df["cluster"] == label]
+                ax.scatter(
+                    points["curvature"],
+                    points["torsion"],
+                    s=36,
+                    alpha=0.8,
+                    c=[cluster_color(label)],
+                    label=cluster_legend_label(label),
+                    edgecolors="none",
+                )
+        else:
+            ax.scatter(
+                residue_df["curvature"],
+                residue_df["torsion"],
+                s=36,
+                alpha=0.8,
+                c="#4c78a8",
+                label="Models",
+                edgecolors="none",
+            )
+        if reference is not None:
+            ax.scatter(
+                [reference[0]],
+                [reference[1]],
+                marker="*",
+                s=260,
+                c="black",
+                label="Reference",
+                zorder=3,
+            )
+
+        chain = residue_df["chain"].iloc[0]
+        title = residue_df["residue_label"].iloc[0]
+        if chain not in (None, ""):
+            title = f"Chain {chain}: {title}"
+        if dmax is not None:
+            title = f"{title} (dmax {dmax:.3f})"
+        ax.set_title(title)
+        ax.set_xlabel("Curvature (1/Å)")
+        ax.set_ylabel("Torsion (1/Å)")
+        if len(ax.get_legend_handles_labels()[0]) > 1:
+            ax.legend(loc="best")
+        ax.grid(alpha=0.3)
+        return fig
+
+
 class ResidueRangeClusterPlotter:
     def plot(self, range_cluster_df, output_path: str | Path) -> None:
         import matplotlib.pyplot as plt

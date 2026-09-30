@@ -8,6 +8,7 @@ from flexgeo2.clustering import ClusteringService
 from flexgeo2.config import AnalysisConfig
 from flexgeo2.geometry import GeometryService, StructureInfo
 from flexgeo2.outputs import check_output_dir
+from flexgeo2.selection import parse_residue_selections, select_residues
 
 
 def validate_config(config: AnalysisConfig) -> None:
@@ -45,6 +46,8 @@ def validate_config(config: AnalysisConfig) -> None:
     for range_text in clustering.cluster_residue_ranges:
         ClusteringService.parse_residue_range(range_text)
 
+    parse_residue_selections(config.output.plot_residues)
+
     if config.output.distance_matrices and reference is None:
         raise ValueError(
             "Distance matrices need a reference (--reference-model or --reference-pdb)."
@@ -73,7 +76,7 @@ def validate_against_structure(
     info: StructureInfo,
     reference_info: StructureInfo | None = None,
 ) -> None:
-    """Check chains, reference models and residue ranges against parsed structures."""
+    """Check chains, reference models and residue selections against parsed structures."""
     available_chains = sorted(info.residues_by_chain)
     if config.chains:
         missing = [chain for chain in config.chains if chain not in info.residues_by_chain]
@@ -113,3 +116,8 @@ def validate_against_structure(
                 f"Residue range {start}-{end} does not match any residues in the selected "
                 f"chain(s): {', '.join(selected_chains)}."
             )
+
+    select_residues(
+        parse_residue_selections(config.output.plot_residues),
+        {chain: info.residues_by_chain.get(chain, set()) for chain in selected_chains},
+    )

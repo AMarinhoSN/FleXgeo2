@@ -127,6 +127,14 @@ To also write the distances to the reference as one models x residues matrix per
 flexgeo2 path/to/ensemble.pdb --reference-model 1 --distance-matrices
 ```
 
+To plot curvature against torsion for chosen residues (one point per model, coloured by cluster with `--cluster-residues`, with the reference marked when one is given):
+
+```bash
+flexgeo2 path/to/ensemble.pdb --cluster-residues --plot-residues 45,A:50-52
+```
+
+A residue number without a chain applies to every analysed chain that has it.
+
 To hide individual model overlays:
 
 ```bash
@@ -220,6 +228,8 @@ Two more files are written when they apply:
   when the input has more than one chain
 - `reference/matrices/<chain>.csv`: distances as a models x residues matrix, with
   `--distance-matrices`
+- `residue_plots/<chain>_<residue number>_<name>.png`: curvature vs torsion of each
+  residue chosen with `--plot-residues`
 
 FleXgeo2 will not write into an output folder that already contains files, so results
 from different runs never mix. To rerun into the same folder, add `--overwrite`

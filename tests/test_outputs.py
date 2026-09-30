@@ -40,6 +40,7 @@ def plotters() -> dict[str, RecordingPlotter]:
             "distance_plotter",
             "residue_range_cluster_plotter",
             "cluster_map_plotter",
+            "residue_plotter",
         )
     }
 
@@ -50,12 +51,14 @@ def make_writer(
     distance_matrices: bool = False,
     write_files: bool = True,
     overwrite: bool = False,
+    plot_residues: list[str] | None = None,
 ) -> OutputWriter:
     config = OutputConfig(
         output_dir=output_dir,
         distance_matrices=distance_matrices,
         write_files=write_files,
         overwrite=overwrite,
+        plot_residues=plot_residues or [],
     )
     return OutputWriter(config, **plotters)
 
@@ -490,3 +493,59 @@ def test_single_chain_input_has_no_per_chain_model_summary(
 
     assert artifacts.model_summary_csv is None
     assert written_files(tmp_path) == BASE_FILES - {"geometry/models_by_chain.csv"}
+
+
+def test_chosen_residues_are_plotted_with_clusters_reference_and_dmax(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+) -> None:
+    # Residue 1 exists in both chains; A:2 only in chain A.
+    artifacts = make_writer(tmp_path, plotters, plot_residues=["1", "A:2"]).write(
+        full_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    assert artifacts.residue_plots_dir == tmp_path.resolve() / "residue_plots"
+    assert written_files(tmp_path) == FULL_DEFAULT_FILES | {
+        "residue_plots/A_0001_ALA.png",
+        "residue_plots/A_0002_GLY.png",
+        "residue_plots/B_0001_GLY.png",
+    }
+    calls = plotters["residue_plotter"].calls
+    assert len(calls) == 3
+    summary = full_result.residue_summary_df.set_index(["chain", "order"])
+    distances = full_result.distance_result.long_df
+    for call in calls:
+        points = call["args"][0]
+        chain, order = points["chain"].iloc[0], points["order"].iloc[0]
+        assert set(points["chain"]) == {chain} and set(points["order"]) == {order}
+        assert len(points) == 2  # both models
+        assert "cluster" in points.columns
+        assert call["kwargs"]["dmax"] == summary.loc[(chain, order), "dmax"]
+        reference = distances[(distances["chain"] == chain) & (distances["order"] == order)]
+        assert call["kwargs"]["reference"] == (
+            reference["reference_curvature"].iloc[0],
+            reference["reference_torsion"].iloc[0],
+        )
+
+
+def test_residue_plots_without_clustering_or_reference(
+    tmp_path: Path, plotters: dict, base_result: AnalysisResult
+) -> None:
+    make_writer(tmp_path, plotters, plot_residues=["B:1"]).write(
+        base_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    [call] = plotters["residue_plotter"].calls
+    assert call["output_path"].name == "B_0001_GLY.png"
+    assert "cluster" not in call["args"][0].columns
+    assert call["kwargs"]["reference"] is None
+
+
+def test_no_residue_plots_unless_requested(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+) -> None:
+    artifacts = make_writer(tmp_path, plotters).write(
+        full_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    assert artifacts.residue_plots_dir is None
+    assert plotters["residue_plotter"].calls == []

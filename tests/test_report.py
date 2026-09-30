@@ -54,6 +54,8 @@ def full_run(tmp_path_factory: pytest.TempPathFactory, two_chain_ensemble: Path)
             "--cluster-min-size",
             "2",
             "--distance-matrices",
+            "--plot-residues",
+            "3,A:5",
         ]
     )
     assert exit_code == 0

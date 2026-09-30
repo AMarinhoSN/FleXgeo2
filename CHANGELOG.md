@@ -30,8 +30,9 @@ model numbers, so results and scripts written for it need updating: see
   default. Distance matrices need `--distance-matrices`. `geometry/models_by_chain.csv`
   is written whenever the input has more than one chain. Passing `--output-verbose`
   exits with a message naming these replacements.
-- **Per-residue cluster scatter plots are removed.** `clusters/clusters.png` shows every
-  residue in one figure; notebook 04 shows how to plot a chosen residue from Python.
+- **Per-residue cluster scatter plots are no longer written for every residue.**
+  `clusters/clusters.png` shows every residue in one figure, and `--plot-residues` plots
+  the residues you choose.
 - **FleXgeo2 refuses to write into an output folder that already has files**, so results
   of different runs cannot mix. Use `--overwrite` to replace an earlier run.
 - **Table columns**:
@@ -52,9 +53,10 @@ model numbers, so results and scripts written for it need updating: see
   - `OutputConfig.verbose` is replaced by `OutputConfig.distance_matrices`;
     `OutputConfig.overwrite` is new.
   - `OutputArtifacts`: `chains_dir` and `cluster_plots_dir` are removed; `readme`,
-    `run_manifest` and `cluster_map_plot` are new.
+    `run_manifest`, `cluster_map_plot` and `residue_plots_dir` are new.
   - `OutputWriter` no longer takes `chain_plotter` or `residue_cluster_plotter`, and
-    takes a new `cluster_map_plotter`. `ResidueClusterPlotter` is removed.
+    takes new `cluster_map_plotter` and `residue_plotter` arguments.
+    `ResidueClusterPlotter` is replaced by `ResiduePlotter`.
   - The column changes above apply to the result data frames too (`raw_df`, the
     cluster `assignments_df` and `summary_df` tables).
 
@@ -66,6 +68,11 @@ model numbers, so results and scripts written for it need updating: see
 - `clusters/clusters.png`: the cluster of every model at every residue, with the number
   of clusters per residue above it.
 - `--distance-matrices` and `--overwrite` options.
+- `--plot-residues` (`OutputConfig.plot_residues`): curvature vs torsion plots for chosen
+  residues (`45`, `45-50`, `A:45`, `A:45-50`, comma-separated), written to
+  `residue_plots/`. Points are coloured by cluster when per-residue clustering ran, the
+  reference is marked when one was given, and the title gives the residue's `dmax`.
+  Selections are checked against the structure before Melodia runs.
 - A short terminal summary: the input, the headline result of each analysis, and where
   the results are. It replaces the list of every output path.
 - Up-front validation: chains, reference models and residue ranges are checked before
@@ -112,7 +119,7 @@ Output files:
 | `distance_matrices/<chain>_distance_matrix.csv` (verbose) | `reference/matrices/<chain>.csv` (`--distance-matrices`) |
 | `residue_cluster_assignments.csv` (verbose) | `clusters/assignments.csv` |
 | `residue_cluster_summary.csv` | `clusters/residues.csv` |
-| `cluster_plots/<chain>_<residue>_clusters.png` | removed; see `clusters/clusters.png` |
+| `cluster_plots/<chain>_<residue>_clusters.png` | `clusters/clusters.png` for all residues; `residue_plots/<chain>_<residue number>_<name>.png` for residues chosen with `--plot-residues` |
 | `residue_range_cluster_assignments.csv` (verbose) | `range_clusters/assignments.csv` |
 | `residue_range_cluster_summary.csv` | `range_clusters/ranges.csv` |
 | `range_cluster_plots/<chain>_<start-end>_clusters.png` | `range_clusters/<chain>_<start-end>.png` |

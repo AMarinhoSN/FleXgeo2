@@ -156,3 +156,44 @@ def test_cli_runs_both_clustering_modes(mini_ensemble_pdb: Path, tmp_path: Path)
     range_assignments = pd.read_csv(output_dir / "range_clusters" / "assignments.csv")
     assert range_assignments["model"].tolist() == [1, 2, 3]
     assert set(range_assignments["range_label"]) == {"2-5"}
+
+
+def test_cli_plots_chosen_residues(mini_ensemble_pdb: Path, tmp_path: Path, capsys) -> None:
+    output_dir = tmp_path / "out"
+
+    exit_code = main(
+        [
+            str(mini_ensemble_pdb),
+            "--output-dir",
+            str(output_dir),
+            "--cluster-residues",
+            "--cluster-min-size",
+            "2",
+            "--reference-model",
+            "1",
+            "--plot-residues",
+            "3,A:5-6",
+        ]
+    )
+
+    assert exit_code == 0
+    plots = sorted(path.name for path in (output_dir / "residue_plots").iterdir())
+    residues = pd.read_csv(output_dir / "geometry" / "residues.csv").set_index("order")
+    assert plots == [f"A_{order:04d}_{residues.loc[order, 'name']}.png" for order in (3, 5, 6)]
+    assert "Residue plots: 3 in out/residue_plots/" in capsys.readouterr().out
+
+
+def test_cli_rejects_residue_plots_outside_the_structure_before_melodia(
+    monkeypatch: pytest.MonkeyPatch, mini_ensemble_pdb: Path, tmp_path: Path, capsys
+) -> None:
+    def fail_compute_geometry(*args, **kwargs):
+        raise AssertionError("Melodia should not run when the input is invalid.")
+
+    monkeypatch.setattr(GeometryService, "compute_geometry", fail_compute_geometry)
+
+    exit_code = main(
+        [str(mini_ensemble_pdb), "--output-dir", str(tmp_path / "out"), "--plot-residues", "9-12"]
+    )
+
+    assert exit_code == 1
+    assert "residue(s) 11, 12 not found in chain(s) A" in capsys.readouterr().err

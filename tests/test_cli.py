@@ -39,6 +39,10 @@ def test_build_config_maps_cli_flags() -> None:
             "10-12",
             "--distance-matrices",
             "--overwrite",
+            "--plot-residues",
+            "10,A:11",
+            "--plot-residues",
+            "12-13",
         ]
     )
 
@@ -47,6 +51,7 @@ def test_build_config_maps_cli_flags() -> None:
     assert config.pdb_file == Path("ensemble.pdb")
     assert config.output.output_dir == Path("out")
     assert config.output.distance_matrices is True
+    assert config.output.plot_residues == ["10,A:11", "12-13"]
     assert config.output.write_files is True
     assert config.output.overwrite is True
     assert config.chains == ["A", "B"]

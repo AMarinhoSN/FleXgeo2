@@ -10,10 +10,12 @@ from flexgeo2.plotting import (
     ClusterMapPlotter,
     DistanceHeatmapPlotter,
     OverviewPlotter,
+    ResiduePlotter,
     ResidueRangeClusterPlotter,
     sanitize_chain_id,
 )
 from flexgeo2.report import write_report, written_files
+from flexgeo2.selection import parse_residue_selections, select_residues
 
 # Folders FleXgeo2 creates inside output_dir, deepest first so they can be removed in order.
 OUTPUT_SUBDIRS = (
@@ -22,6 +24,7 @@ OUTPUT_SUBDIRS = (
     "reference",
     "clusters",
     "range_clusters",
+    "residue_plots",
 )
 
 
@@ -85,6 +88,7 @@ class OutputWriter:
         distance_plotter: DistanceHeatmapPlotter | None = None,
         residue_range_cluster_plotter: ResidueRangeClusterPlotter | None = None,
         cluster_map_plotter: ClusterMapPlotter | None = None,
+        residue_plotter: ResiduePlotter | None = None,
     ) -> None:
         self.config = config
         self.overview_plotter = overview_plotter or OverviewPlotter()
@@ -93,6 +97,7 @@ class OutputWriter:
             residue_range_cluster_plotter or ResidueRangeClusterPlotter()
         )
         self.cluster_map_plotter = cluster_map_plotter or ClusterMapPlotter()
+        self.residue_plotter = residue_plotter or ResiduePlotter()
 
     @staticmethod
     def write_distance_matrix_csv(distance_long_df, output_path: str | Path) -> None:
@@ -145,6 +150,7 @@ class OutputWriter:
                 range_clusters_dir / "ranges.csv" if range_clusters_dir else None
             ),
             range_cluster_plots_dir=range_clusters_dir,
+            residue_plots_dir=output_dir / "residue_plots" if self.config.plot_residues else None,
         )
 
         result.raw_df.to_csv(artifacts.raw_csv, index=False)
@@ -217,9 +223,51 @@ class OutputWriter:
                 result.residue_range_clustering.assignments_df, artifacts.range_cluster_plots_dir
             )
 
+        if artifacts.residue_plots_dir is not None:
+            artifacts.residue_plots_dir.mkdir(parents=True, exist_ok=True)
+            self._plot_chosen_residues(result, artifacts.residue_plots_dir)
+
         # Last, so the guide and manifest describe the files that now exist.
         artifacts.readme, artifacts.run_manifest = write_report(result, output_dir)
         return artifacts
+
+    @staticmethod
+    def residue_plot_name(chain, order: int, name: str) -> str:
+        """Zero-padded residue number first, so files sort in sequence order."""
+        return f"{sanitize_chain_id(chain)}_{int(order):04d}_{name}.png"
+
+    def _plot_chosen_residues(self, result: AnalysisResult, plots_dir: Path) -> None:
+        summary = result.residue_summary_df
+        residues_by_chain = {
+            chain: set(group["order"]) for chain, group in summary.groupby("chain", dropna=False)
+        }
+        chosen = select_residues(
+            parse_residue_selections(self.config.plot_residues), residues_by_chain
+        )
+        # Cluster assignments carry the same curvature and torsion plus the cluster label.
+        points = (
+            result.residue_clustering.assignments_df
+            if result.residue_clustering is not None
+            else result.raw_df
+        )
+        reference = result.distance_result.long_df if result.distance_result else None
+
+        for chain, order in chosen:
+            residue = summary[(summary["chain"] == chain) & (summary["order"] == order)].iloc[0]
+            reference_point = None
+            if reference is not None:
+                rows = reference[(reference["chain"] == chain) & (reference["order"] == order)]
+                if not rows.empty:
+                    reference_point = (
+                        rows["reference_curvature"].iloc[0],
+                        rows["reference_torsion"].iloc[0],
+                    )
+            self.residue_plotter.plot(
+                points[(points["chain"] == chain) & (points["order"] == order)],
+                plots_dir / self.residue_plot_name(chain, order, residue["name"]),
+                dmax=residue["dmax"],
+                reference=reference_point,
+            )
 
     def _plot_range_clusters(self, assignments_df, plots_dir: Path) -> None:
         for (chain, range_label), range_cluster_df in assignments_df.groupby(

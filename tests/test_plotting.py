@@ -14,6 +14,7 @@ from flexgeo2.plotting import (
     ClusterMapPlotter,
     DistanceHeatmapPlotter,
     OverviewPlotter,
+    ResiduePlotter,
     ResidueRangeClusterPlotter,
     cluster_color,
     cluster_palette,
@@ -139,7 +140,7 @@ def legend_labels(figure: Figure) -> list[str]:
 
 @pytest.mark.parametrize(
     "plotter",
-    ["chain", "overview", "heatmap", "range_cluster", "cluster_map"],
+    ["chain", "overview", "heatmap", "range_cluster", "cluster_map", "residue"],
 )
 def test_every_plotter_writes_a_readable_png(
     plotter: str,
@@ -167,6 +168,9 @@ def test_every_plotter_writes_a_readable_png(
             range_cluster_df([-1, 0, 0, 1]), output
         ),
         "cluster_map": lambda: ClusterMapPlotter().plot(map_summary, output, map_assignments),
+        "residue": lambda: ResiduePlotter().plot(
+            residue_points([0, 1, 1, -1]), output, dmax=0.5, reference=(0.2, 0.0)
+        ),
     }
 
     calls[plotter]()
@@ -446,3 +450,49 @@ def test_cluster_palette_is_distinct_and_avoids_the_noise_grey() -> None:
         assert not (np.isclose(red, green) and np.isclose(green, blue)), color
     assert cluster_color(0) != cluster_color(10)
     assert cluster_color(-1) == NOISE_COLOR
+
+
+def residue_points(clusters: list[int] | None = None, chain: str = "A") -> pd.DataFrame:
+    frame = pd.DataFrame(
+        {
+            "chain": chain,
+            "model": [1, 2, 3, 4],
+            "order": 45,
+            "name": "HIS",
+            "residue_label": "HIS45",
+            "curvature": [0.1, 0.2, 0.3, 0.4],
+            "torsion": [0.0, -0.1, -0.2, -0.3],
+        }
+    )
+    return frame if clusters is None else frame.assign(cluster=clusters)
+
+
+def test_residue_plot_colours_points_by_cluster_and_marks_reference() -> None:
+    fig = ResiduePlotter().render(
+        residue_points([0, 0, 1, -1]), dmax=1.2345, reference=(0.25, -0.05)
+    )
+    try:
+        axis = fig.axes[0]
+        assert axis.get_title() == "Chain A: HIS45 (dmax 1.234)"
+        labels = [text.get_text() for text in axis.get_legend().get_texts()]
+        assert labels == ["Noise", "Cluster 0", "Cluster 1", "Reference"]
+        noise, cluster_0, cluster_1, reference = axis.collections
+        # Compare RGB only: points are drawn semi-transparent.
+        assert tuple(cluster_0.get_facecolor()[0][:3]) == to_rgba(cluster_color(0))[:3]
+        assert tuple(noise.get_facecolor()[0][:3]) == to_rgba(NOISE_COLOR)[:3]
+        assert [len(c.get_offsets()) for c in (noise, cluster_0, cluster_1)] == [1, 2, 1]
+        assert reference.get_offsets().tolist() == [[0.25, -0.05]]
+    finally:
+        plt.close(fig)
+
+
+def test_residue_plot_without_clusters_or_reference_has_one_group_and_no_legend() -> None:
+    fig = ResiduePlotter().render(residue_points(chain=""))
+    try:
+        axis = fig.axes[0]
+        assert axis.get_title() == "HIS45"
+        [points] = axis.collections
+        assert len(points.get_offsets()) == 4
+        assert axis.get_legend() is None
+    finally:
+        plt.close(fig)
