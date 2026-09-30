@@ -145,13 +145,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--output-verbose",
+        "--distance-matrices",
         action="store_true",
         help=(
-            "Also write a curvature vs torsion plot per clustered residue, the per-chain "
-            "model summary and the distance matrices."
+            "Also write the distances to the reference as one models x residues CSV per "
+            "chain (reference/matrices/). Requires --reference-model or --reference-pdb."
         ),
     )
+    # Removed option, kept hidden so old command lines get a pointer to its replacements.
+    parser.add_argument("--output-verbose", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
@@ -173,7 +175,7 @@ def build_config(args: argparse.Namespace) -> AnalysisConfig:
 
     output = OutputConfig(
         output_dir=args.output_dir,
-        verbose=args.output_verbose,
+        distance_matrices=args.distance_matrices,
         write_files=True,
         overwrite=args.overwrite,
     )
@@ -213,12 +215,11 @@ def print_run_summary(result) -> None:
         print(f"Distance heatmap: {outputs.distance_heatmap}")
     if outputs.distance_long_csv is not None:
         print(f"Distance details: {outputs.distance_long_csv}")
+    if outputs.distance_matrix_dir is not None:
         print(f"Distance matrices by chain: {outputs.distance_matrix_dir}")
     if outputs.cluster_summary_csv is not None:
         print(f"Residue cluster summary: {outputs.cluster_summary_csv}")
         print(f"Residue cluster map: {outputs.cluster_map_plot}")
-    if outputs.cluster_plots_dir is not None:
-        print(f"Residue cluster plots: {outputs.cluster_plots_dir}")
     if outputs.cluster_assignments_csv is not None:
         print(f"Residue cluster assignments: {outputs.cluster_assignments_csv}")
     if outputs.range_cluster_summary_csv is not None:
@@ -230,8 +231,16 @@ def print_run_summary(result) -> None:
 
 def parse_args(parser: argparse.ArgumentParser, argv: list[str] | None = None):
     args = parser.parse_args(argv)
+    if args.output_verbose:
+        parser.error(
+            "--output-verbose was removed. Distance matrices: --distance-matrices. "
+            "geometry/models_by_chain.csv is now written whenever there is more than one "
+            "chain. Per-residue cluster plots are replaced by clusters/clusters.png."
+        )
     if args.reference_pdb_model is not None and args.reference_pdb is None:
         parser.error("--reference-pdb-model requires --reference-pdb.")
+    if args.distance_matrices and args.reference_model is None and args.reference_pdb is None:
+        parser.error("--distance-matrices requires --reference-model or --reference-pdb.")
     return args
 
 

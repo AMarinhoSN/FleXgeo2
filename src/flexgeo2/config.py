@@ -30,8 +30,9 @@ class OutputConfig:
     """Output policy for file writing."""
 
     output_dir: PathLike | None = Path("results")
-    verbose: bool = False
     write_files: bool = True
+    # Also write the distances to the reference as one models x residues CSV per chain.
+    distance_matrices: bool = False
     # Allow writing into a non-empty output_dir, replacing an earlier run's outputs.
     overwrite: bool = False
 

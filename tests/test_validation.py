@@ -88,6 +88,17 @@ def test_validate_config_rejects_invalid_options(
         validate_config(AnalysisConfig(pdb_file=pdb_file, **overrides))
 
 
+def test_validate_config_rejects_distance_matrices_without_reference(pdb_file: Path) -> None:
+    output = OutputConfig(distance_matrices=True)
+
+    with pytest.raises(ValueError, match="Distance matrices need a reference"):
+        validate_config(AnalysisConfig(pdb_file=pdb_file, output=output))
+
+    validate_config(
+        AnalysisConfig(pdb_file=pdb_file, output=output, reference=ReferenceConfig(model_id="1"))
+    )
+
+
 def test_validate_config_rejects_non_empty_output_dir(pdb_file: Path, tmp_path: Path) -> None:
     # tmp_path already holds the input PDB.
     with pytest.raises(OutputDirectoryNotEmptyError):

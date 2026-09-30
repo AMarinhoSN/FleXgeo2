@@ -14,7 +14,6 @@ from flexgeo2.plotting import (
     ClusterMapPlotter,
     DistanceHeatmapPlotter,
     OverviewPlotter,
-    ResidueClusterPlotter,
     ResidueRangeClusterPlotter,
     cluster_color,
     cluster_palette,
@@ -106,22 +105,6 @@ def test_overview_model_traces_follow_flags(
         plt.close(fig)
 
 
-def residue_cluster_df(clusters: list[int], chain: str = "A") -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "chain": chain,
-            "model": range(1, len(clusters) + 1),
-            "order": 1,
-            "name": "ALA",
-            "residue_label": "ALA1",
-            "curvature": [0.1 * index for index in range(len(clusters))],
-            "torsion": [0.05 * index for index in range(len(clusters))],
-            "cluster": clusters,
-            "cluster_probability": 1.0,
-        }
-    )
-
-
 def range_cluster_df(clusters: list[int], chain: str = "A") -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -156,7 +139,7 @@ def legend_labels(figure: Figure) -> list[str]:
 
 @pytest.mark.parametrize(
     "plotter",
-    ["chain", "overview", "heatmap", "residue_cluster", "range_cluster", "cluster_map"],
+    ["chain", "overview", "heatmap", "range_cluster", "cluster_map"],
 )
 def test_every_plotter_writes_a_readable_png(
     plotter: str,
@@ -180,9 +163,6 @@ def test_every_plotter_writes_a_readable_png(
             distance_summary_df=overview_extras(overview_summary)[1],
         ),
         "heatmap": lambda: DistanceHeatmapPlotter().plot(distance_long_df, output, "title"),
-        "residue_cluster": lambda: ResidueClusterPlotter().plot(
-            residue_cluster_df([-1, 0, 0, 1]), output
-        ),
         "range_cluster": lambda: ResidueRangeClusterPlotter().plot(
             range_cluster_df([-1, 0, 0, 1]), output
         ),
@@ -227,15 +207,10 @@ def test_chain_plot_titles_and_model_traces(
         assert len(axis.get_lines()) == 1 + expected_traces
 
 
-@pytest.mark.parametrize(
-    ("plotter", "frame"),
-    [(ResidueClusterPlotter, residue_cluster_df), (ResidueRangeClusterPlotter, range_cluster_df)],
-    ids=["residue", "range"],
-)
-def test_cluster_plots_label_noise_and_clusters(
-    plotter, frame, saved_figures: list[Figure], tmp_path
+def test_range_cluster_plot_labels_noise_and_clusters(
+    saved_figures: list[Figure], tmp_path
 ) -> None:
-    plotter().plot(frame([1, -1, 0, 0, 1, -1]), tmp_path / "clusters.png")
+    ResidueRangeClusterPlotter().plot(range_cluster_df([1, -1, 0, 0, 1, -1]), tmp_path / "r.png")
 
     [figure] = saved_figures
     assert legend_labels(figure) == ["Noise", "Cluster 0", "Cluster 1"]
@@ -243,22 +218,16 @@ def test_cluster_plots_label_noise_and_clusters(
     assert noise_collection.get_facecolor()[0][:3] == pytest.approx((0x9E / 255,) * 3)
 
 
-@pytest.mark.parametrize(
-    ("plotter", "frame", "title"),
-    [
-        (ResidueClusterPlotter, residue_cluster_df, "Chain: ALA1"),
-        (ResidueRangeClusterPlotter, range_cluster_df, "Chain: residues 1-2"),
-    ],
-    ids=["residue", "range"],
-)
-def test_cluster_plots_handle_blank_chain_and_many_clusters(
-    plotter, frame, title: str, saved_figures: list[Figure], tmp_path
+def test_range_cluster_plot_handles_blank_chain_and_many_clusters(
+    saved_figures: list[Figure], tmp_path
 ) -> None:
     # More clusters than colours in the tab10 palette.
-    plotter().plot(frame(list(range(12)), chain=""), tmp_path / "clusters.png")
+    ResidueRangeClusterPlotter().plot(
+        range_cluster_df(list(range(12)), chain=""), tmp_path / "r.png"
+    )
 
     [figure] = saved_figures
-    assert figure.axes[0].get_title() == title
+    assert figure.axes[0].get_title() == "Chain: residues 1-2"
     assert legend_labels(figure) == [f"Cluster {index}" for index in range(12)]
 
 
@@ -451,8 +420,8 @@ def test_cluster_map_marks_missing_residues_and_draws_each_chain() -> None:
 
 
 def test_cluster_colours_depend_only_on_the_label(saved_figures: list[Figure], tmp_path) -> None:
-    ResidueClusterPlotter().plot(residue_cluster_df([0, 0, 1]), tmp_path / "no_noise.png")
-    ResidueClusterPlotter().plot(residue_cluster_df([-1, 0, 1]), tmp_path / "noise.png")
+    ResidueRangeClusterPlotter().plot(range_cluster_df([0, 0, 1]), tmp_path / "no_noise.png")
+    ResidueRangeClusterPlotter().plot(range_cluster_df([-1, 0, 1]), tmp_path / "noise.png")
 
     def colours(figure: Figure) -> dict[str, tuple]:
         axis = figure.axes[0]

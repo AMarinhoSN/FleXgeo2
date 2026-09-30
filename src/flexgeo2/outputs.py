@@ -9,7 +9,6 @@ from flexgeo2.plotting import (
     ClusterMapPlotter,
     DistanceHeatmapPlotter,
     OverviewPlotter,
-    ResidueClusterPlotter,
     ResidueRangeClusterPlotter,
     sanitize_chain_id,
 )
@@ -18,7 +17,6 @@ from flexgeo2.report import write_report, written_files
 # Folders FleXgeo2 creates inside output_dir, deepest first so they can be removed in order.
 OUTPUT_SUBDIRS = (
     "reference/matrices",
-    "clusters/residue_plots",
     "geometry",
     "reference",
     "clusters",
@@ -84,14 +82,12 @@ class OutputWriter:
         config: OutputConfig,
         overview_plotter: OverviewPlotter | None = None,
         distance_plotter: DistanceHeatmapPlotter | None = None,
-        residue_cluster_plotter: ResidueClusterPlotter | None = None,
         residue_range_cluster_plotter: ResidueRangeClusterPlotter | None = None,
         cluster_map_plotter: ClusterMapPlotter | None = None,
     ) -> None:
         self.config = config
         self.overview_plotter = overview_plotter or OverviewPlotter()
         self.distance_plotter = distance_plotter or DistanceHeatmapPlotter()
-        self.residue_cluster_plotter = residue_cluster_plotter or ResidueClusterPlotter()
         self.residue_range_cluster_plotter = (
             residue_range_cluster_plotter or ResidueRangeClusterPlotter()
         )
@@ -106,7 +102,6 @@ class OutputWriter:
             return OutputArtifacts()
 
         check_output_dir(self.config)
-        verbose = self.config.verbose
         output_dir = Path(self.config.output_dir).resolve()
         if self.config.overwrite:
             remove_previous_outputs(output_dir)
@@ -123,21 +118,25 @@ class OutputWriter:
         artifacts = OutputArtifacts(
             raw_csv=geometry_dir / "descriptors.csv",
             residue_summary_csv=geometry_dir / "residues.csv",
-            model_summary_csv=geometry_dir / "models_by_chain.csv" if verbose else None,
+            # Only a separate answer when there is more than one chain.
+            model_summary_csv=(
+                geometry_dir / "models_by_chain.csv"
+                if result.raw_df["chain"].nunique(dropna=False) > 1
+                else None
+            ),
             overall_model_summary_csv=geometry_dir / "models.csv",
             overview_plot=output_dir / "overview.png",
             distance_long_csv=reference_dir / "distances.csv" if reference_dir else None,
             distance_summary_csv=reference_dir / "residues.csv" if reference_dir else None,
             distance_heatmap=reference_dir / "heatmap.png" if reference_dir else None,
             distance_matrix_dir=(
-                reference_dir / "matrices" if reference_dir is not None and verbose else None
+                reference_dir / "matrices"
+                if reference_dir is not None and self.config.distance_matrices
+                else None
             ),
             cluster_assignments_csv=clusters_dir / "assignments.csv" if clusters_dir else None,
             cluster_summary_csv=clusters_dir / "residues.csv" if clusters_dir else None,
             cluster_map_plot=clusters_dir / "clusters.png" if clusters_dir else None,
-            cluster_plots_dir=(
-                clusters_dir / "residue_plots" if clusters_dir is not None and verbose else None
-            ),
             range_cluster_assignments_csv=(
                 range_clusters_dir / "assignments.csv" if range_clusters_dir else None
             ),
@@ -198,11 +197,6 @@ class OutputWriter:
                 artifacts.cluster_map_plot,
                 result.residue_clustering.assignments_df,
             )
-            if artifacts.cluster_plots_dir is not None:
-                artifacts.cluster_plots_dir.mkdir(parents=True, exist_ok=True)
-                self._plot_residue_clusters(
-                    result.residue_clustering.assignments_df, artifacts.cluster_plots_dir
-                )
 
         if result.residue_range_clustering is not None:
             result.residue_range_clustering.assignments_df.to_csv(
@@ -218,19 +212,6 @@ class OutputWriter:
         # Last, so the guide and manifest describe the files that now exist.
         artifacts.readme, artifacts.run_manifest = write_report(result, output_dir)
         return artifacts
-
-    @staticmethod
-    def residue_plot_name(chain, order: int, name: str) -> str:
-        """Zero-padded residue number first, so files sort in sequence order."""
-        return f"{sanitize_chain_id(chain)}_{int(order):04d}_{name}.png"
-
-    def _plot_residue_clusters(self, assignments_df, plots_dir: Path) -> None:
-        for (chain, order, name), residue_cluster_df in assignments_df.groupby(
-            ["chain", "order", "name"], dropna=False
-        ):
-            self.residue_cluster_plotter.plot(
-                residue_cluster_df, plots_dir / self.residue_plot_name(chain, order, name)
-            )
 
     def _plot_range_clusters(self, assignments_df, plots_dir: Path) -> None:
         for (chain, range_label), range_cluster_df in assignments_df.groupby(

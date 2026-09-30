@@ -45,6 +45,11 @@ def validate_config(config: AnalysisConfig) -> None:
     for range_text in clustering.cluster_residue_ranges:
         ClusteringService.parse_residue_range(range_text)
 
+    if config.output.distance_matrices and reference is None:
+        raise ValueError(
+            "Distance matrices need a reference (--reference-model or --reference-pdb)."
+        )
+
     check_output_dir(config.output)
 
 

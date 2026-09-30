@@ -56,7 +56,7 @@ def test_cli_reference_model_uses_pdb_model_numbering(
             str(output_dir),
             "--reference-model",
             "1",
-            "--output-verbose",
+            "--distance-matrices",
         ]
     )
 
@@ -123,10 +123,8 @@ def test_cli_runs_both_clustering_modes(mini_ensemble_pdb: Path, tmp_path: Path)
     assert set(residue_summary["n_conformations"]) == {3}
     assert residue_summary["noise_fraction"].between(0.0, 1.0).all()
     assert (output_dir / "clusters" / "clusters.png").is_file()
-    # Per-residue scatter plots are only written with --output-verbose.
-    assert not (output_dir / "clusters" / "residue_plots").exists()
 
-    # Per-model answers are written by default (no --output-verbose).
+    # Per-model answers are written by default.
     assignments = pd.read_csv(output_dir / "clusters" / "assignments.csv")
     assert len(assignments) == 3 * 10
     assert set(assignments["model"]) == {1, 2, 3}

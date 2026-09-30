@@ -37,7 +37,7 @@ def test_build_config_maps_cli_flags() -> None:
             "2",
             "--cluster-residue-range",
             "10-12",
-            "--output-verbose",
+            "--distance-matrices",
             "--overwrite",
         ]
     )
@@ -46,7 +46,7 @@ def test_build_config_maps_cli_flags() -> None:
 
     assert config.pdb_file == Path("ensemble.pdb")
     assert config.output.output_dir == Path("out")
-    assert config.output.verbose is True
+    assert config.output.distance_matrices is True
     assert config.output.write_files is True
     assert config.output.overwrite is True
     assert config.chains == ["A", "B"]
@@ -77,6 +77,28 @@ def test_parser_rejects_reference_pdb_model_without_reference_pdb(capsys) -> Non
 
     assert excinfo.value.code == 2
     assert "--reference-pdb-model requires --reference-pdb" in capsys.readouterr().err
+
+
+def test_parser_rejects_distance_matrices_without_reference(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        parse_args(build_parser(), ["ensemble.pdb", "--distance-matrices"])
+
+    assert excinfo.value.code == 2
+    assert "--distance-matrices requires --reference-model or --reference-pdb" in (
+        capsys.readouterr().err
+    )
+
+
+def test_removed_output_verbose_points_to_its_replacements(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        parse_args(build_parser(), ["ensemble.pdb", "--output-verbose"])
+
+    assert excinfo.value.code == 2
+    err = capsys.readouterr().err
+    assert "--output-verbose was removed" in err
+    assert "--distance-matrices" in err
+    assert "clusters/clusters.png" in err
+    assert "--output-verbose" not in build_parser().format_help()
 
 
 @pytest.mark.parametrize(

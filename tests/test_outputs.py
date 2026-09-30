@@ -38,7 +38,6 @@ def plotters() -> dict[str, RecordingPlotter]:
         for name in (
             "overview_plotter",
             "distance_plotter",
-            "residue_cluster_plotter",
             "residue_range_cluster_plotter",
             "cluster_map_plotter",
         )
@@ -48,12 +47,15 @@ def plotters() -> dict[str, RecordingPlotter]:
 def make_writer(
     output_dir: Path | None,
     plotters: dict[str, RecordingPlotter],
-    verbose: bool = False,
+    distance_matrices: bool = False,
     write_files: bool = True,
     overwrite: bool = False,
 ) -> OutputWriter:
     config = OutputConfig(
-        output_dir=output_dir, verbose=verbose, write_files=write_files, overwrite=overwrite
+        output_dir=output_dir,
+        distance_matrices=distance_matrices,
+        write_files=write_files,
+        overwrite=overwrite,
     )
     return OutputWriter(config, **plotters)
 
@@ -143,6 +145,7 @@ def artifact_paths(artifacts: OutputArtifacts) -> dict[str, Path]:
     }
 
 
+# The fixture has two chains, so the per-chain model summary is written too.
 BASE_FILES = {
     "README.md",
     "run.json",
@@ -150,6 +153,7 @@ BASE_FILES = {
     "geometry/descriptors.csv",
     "geometry/residues.csv",
     "geometry/models.csv",
+    "geometry/models_by_chain.csv",
 }
 
 FULL_DEFAULT_FILES = BASE_FILES | {
@@ -164,13 +168,9 @@ FULL_DEFAULT_FILES = BASE_FILES | {
     "range_clusters/A_1-2.png",
 }
 
-FULL_VERBOSE_FILES = FULL_DEFAULT_FILES | {
-    "geometry/models_by_chain.csv",
+FULL_WITH_MATRICES_FILES = FULL_DEFAULT_FILES | {
     "reference/matrices/A.csv",
     "reference/matrices/B.csv",
-    "clusters/residue_plots/A_0001_ALA.png",
-    "clusters/residue_plots/A_0002_GLY.png",
-    "clusters/residue_plots/B_0001_GLY.png",
 }
 
 
@@ -207,6 +207,7 @@ def test_default_mode_writes_only_core_outputs(
         "raw_csv",
         "residue_summary_csv",
         "overall_model_summary_csv",
+        "model_summary_csv",
         "overview_plot",
         "readme",
         "run_manifest",
@@ -221,27 +222,25 @@ def test_default_mode_with_all_analyses(
     )
 
     assert written_files(tmp_path) == FULL_DEFAULT_FILES
-    assert artifacts.model_summary_csv is None
     assert artifacts.distance_matrix_dir is None
-    assert artifacts.cluster_plots_dir is None
 
 
-def test_verbose_mode_with_all_analyses(
+def test_distance_matrices_option_adds_one_matrix_per_chain(
     tmp_path: Path, plotters: dict, full_result: AnalysisResult
 ) -> None:
-    artifacts = make_writer(tmp_path, plotters, verbose=True).write(
+    artifacts = make_writer(tmp_path, plotters, distance_matrices=True).write(
         full_result, max_models_in_plot=12, hide_model_traces=False
     )
 
-    assert written_files(tmp_path) == FULL_VERBOSE_FILES
+    assert written_files(tmp_path) == FULL_WITH_MATRICES_FILES
     assert artifacts.distance_matrix_dir == tmp_path.resolve() / "reference" / "matrices"
 
 
-@pytest.mark.parametrize("verbose", [False, True])
+@pytest.mark.parametrize("distance_matrices", [False, True])
 def test_reported_artifacts_exist_on_disk(
-    tmp_path: Path, plotters: dict, full_result: AnalysisResult, verbose: bool
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult, distance_matrices: bool
 ) -> None:
-    artifacts = make_writer(tmp_path, plotters, verbose=verbose).write(
+    artifacts = make_writer(tmp_path, plotters, distance_matrices=distance_matrices).write(
         full_result, max_models_in_plot=12, hide_model_traces=False
     )
 
@@ -253,7 +252,7 @@ def test_reported_artifacts_exist_on_disk(
 def test_csv_outputs_round_trip(
     tmp_path: Path, plotters: dict, full_result: AnalysisResult
 ) -> None:
-    artifacts = make_writer(tmp_path, plotters, verbose=True).write(
+    artifacts = make_writer(tmp_path, plotters, distance_matrices=True).write(
         full_result, max_models_in_plot=12, hide_model_traces=False
     )
 
@@ -284,7 +283,7 @@ def test_csv_outputs_round_trip(
 def test_distance_matrices_are_split_by_chain(
     tmp_path: Path, plotters: dict, full_result: AnalysisResult
 ) -> None:
-    artifacts = make_writer(tmp_path, plotters, verbose=True).write(
+    artifacts = make_writer(tmp_path, plotters, distance_matrices=True).write(
         full_result, max_models_in_plot=12, hide_model_traces=False
     )
 
@@ -319,7 +318,7 @@ def test_trace_options_reach_overview_plot(
 def test_distance_heatmap_title_names_reference(
     tmp_path: Path, plotters: dict, full_result: AnalysisResult
 ) -> None:
-    make_writer(tmp_path, plotters, verbose=True).write(
+    make_writer(tmp_path, plotters, distance_matrices=True).write(
         full_result, max_models_in_plot=12, hide_model_traces=False
     )
 
@@ -342,21 +341,11 @@ def test_blank_chain_ids_use_unassigned_in_file_names(
     for frame in frames:
         frame.loc[frame["chain"] == "B", "chain"] = ""
 
-    make_writer(tmp_path, plotters, verbose=True).write(
+    make_writer(tmp_path, plotters, distance_matrices=True).write(
         full_result, max_models_in_plot=12, hide_model_traces=False
     )
 
     assert (tmp_path / "reference" / "matrices" / "unassigned.csv").is_file()
-    assert (tmp_path / "clusters" / "residue_plots" / "unassigned_0001_GLY.png").is_file()
-
-
-def test_residue_plot_names_sort_in_sequence_order() -> None:
-    orders = [1, 2, 10, 45, 100, 1000]
-    names = [OutputWriter.residue_plot_name("A", order, "ALA") for order in orders]
-
-    assert sorted(names) == names
-    assert names[3] == "A_0045_ALA.png"
-    assert OutputWriter.residue_plot_name("", 7, "GLY") == "unassigned_0007_GLY.png"
 
 
 def test_non_empty_output_dir_is_refused(
@@ -387,7 +376,7 @@ def test_hidden_files_do_not_make_output_dir_non_empty(
 def test_overwrite_removes_stale_outputs_and_keeps_other_files(
     tmp_path: Path, plotters: dict, full_result: AnalysisResult
 ) -> None:
-    make_writer(tmp_path, plotters, verbose=True).write(
+    make_writer(tmp_path, plotters, distance_matrices=True).write(
         full_result, max_models_in_plot=12, hide_model_traces=False
     )
     (tmp_path / "notes.txt").write_text("mine")
@@ -407,7 +396,6 @@ def test_overwrite_removes_stale_outputs_and_keeps_other_files(
     } | {"notes.txt", "clusters/picked.txt"}
     assert not (tmp_path / "reference").exists()
     assert not (tmp_path / "range_clusters").exists()
-    assert not (tmp_path / "clusters" / "residue_plots").exists()
     assert (tmp_path / "notes.txt").read_text() == "mine"
 
 
@@ -459,3 +447,28 @@ def test_overview_without_optional_analyses_gets_no_summaries(
     [overview_call] = plotters["overview_plotter"].calls
     assert overview_call["kwargs"]["cluster_summary_df"] is None
     assert overview_call["kwargs"]["distance_summary_df"] is None
+
+
+def test_single_chain_input_has_no_per_chain_model_summary(
+    tmp_path: Path, plotters: dict, normalized_geometry_df: pd.DataFrame
+) -> None:
+    chain_a = normalized_geometry_df[normalized_geometry_df["chain"] == "A"]
+    geometry = GeometryService()
+    residue_summary_df = geometry.summarize(chain_a)
+    model_summary_df, overall_model_summary_df = geometry.build_model_summary(
+        chain_a, residue_summary_df
+    )
+    result = AnalysisResult(
+        pdb_file=Path("ensemble.pdb"),
+        raw_df=chain_a,
+        residue_summary_df=residue_summary_df,
+        model_summary_df=model_summary_df,
+        overall_model_summary_df=overall_model_summary_df,
+    )
+
+    artifacts = make_writer(tmp_path, plotters).write(
+        result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    assert artifacts.model_summary_csv is None
+    assert written_files(tmp_path) == BASE_FILES - {"geometry/models_by_chain.csv"}

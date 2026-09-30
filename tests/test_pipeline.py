@@ -381,7 +381,7 @@ def test_app_run_wires_both_clustering_modes(
 def test_app_run_passes_output_config_and_result_to_writer(
     app: FlexGeo2App, pdb_file: Path, tmp_path: Path
 ) -> None:
-    output = OutputConfig(output_dir=tmp_path / "out", verbose=True)
+    output = OutputConfig(output_dir=tmp_path / "out", overwrite=True)
     config = AnalysisConfig(pdb_file=pdb_file, output=output)
 
     result = app.run(config)

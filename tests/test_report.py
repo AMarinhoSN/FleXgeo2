@@ -19,16 +19,33 @@ MINI_ENSEMBLE = Path(__file__).parent / "data" / "mini_ensemble.pdb"
 
 
 @pytest.fixture(scope="module")
-def full_run(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Every analysis and every optional table, on the three-model fixture."""
+def two_chain_ensemble(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The three-model fixture with its chain A copied as chain B."""
+    lines: list[str] = []
+    chain_a: list[str] = []
+    for line in MINI_ENSEMBLE.read_text().splitlines():
+        if line.startswith("ENDMDL"):
+            lines += [f"{atom[:21]}B{atom[22:]}" for atom in chain_a]
+            chain_a = []
+        if line.startswith("ATOM"):
+            chain_a.append(line)
+        lines.append(line)
+    path = tmp_path_factory.mktemp("input") / "two_chains.pdb"
+    path.write_text("\n".join(lines) + "\n")
+    return path
+
+
+@pytest.fixture(scope="module")
+def full_run(tmp_path_factory: pytest.TempPathFactory, two_chain_ensemble: Path) -> Path:
+    """Every analysis and every optional table, on a two-chain, three-model ensemble."""
     output_dir = tmp_path_factory.mktemp("report") / "out"
     exit_code = main(
         [
-            str(MINI_ENSEMBLE),
+            str(two_chain_ensemble),
             "--output-dir",
             str(output_dir),
             "--reference-pdb",
-            str(MINI_ENSEMBLE),
+            str(two_chain_ensemble),
             "--reference-pdb-model",
             "2",
             "--cluster-residues",
@@ -36,7 +53,7 @@ def full_run(tmp_path_factory: pytest.TempPathFactory) -> Path:
             "2-5",
             "--cluster-min-size",
             "2",
-            "--output-verbose",
+            "--distance-matrices",
         ]
     )
     assert exit_code == 0
@@ -94,20 +111,22 @@ def test_readme_skips_outputs_of_analyses_that_did_not_run(tmp_path: Path) -> No
     assert "Distance to reference" not in readme
 
 
-def test_manifest_records_inputs_parameters_and_versions(full_run: Path) -> None:
+def test_manifest_records_inputs_parameters_and_versions(
+    full_run: Path, two_chain_ensemble: Path
+) -> None:
     manifest = json.loads((full_run / "run.json").read_text())
 
     assert manifest["input"] == {
-        "pdb_file": str(MINI_ENSEMBLE.resolve()),
-        "sha256": sha256(MINI_ENSEMBLE),
+        "pdb_file": str(two_chain_ensemble.resolve()),
+        "sha256": sha256(two_chain_ensemble),
         "models": 3,
-        "chains": ["A"],
-        "residues": 10,
+        "chains": ["A", "B"],
+        "residues": 20,
     }
     assert manifest["reference"] == {
-        "label": "mini_ensemble.pdb model 2",
-        "pdb_file": str(MINI_ENSEMBLE.resolve()),
-        "sha256": sha256(MINI_ENSEMBLE),
+        "label": "two_chains.pdb model 2",
+        "pdb_file": str(two_chain_ensemble.resolve()),
+        "sha256": sha256(two_chain_ensemble),
     }
     parameters = manifest["parameters"]
     assert parameters["clustering"] == {
@@ -117,7 +136,7 @@ def test_manifest_records_inputs_parameters_and_versions(full_run: Path) -> None
         "min_samples": None,
     }
     assert parameters["reference"]["pdb_model_id"] == "2"
-    assert parameters["output"]["verbose"] is True
+    assert parameters["output"]["distance_matrices"] is True
     assert manifest["flexgeo2_version"] == metadata.version("FleXgeo2")
     assert manifest["environment"]["packages"]["FleXgeo2"] == metadata.version("FleXgeo2")
     assert datetime.fromisoformat(manifest["created_utc"]).tzinfo is not None
@@ -132,7 +151,7 @@ def test_readme_key_results_match_the_tables(full_run: Path) -> None:
     assert f"| A {most_flexible['residue_label']} | {most_flexible['dmax']:.3f} |" in readme
     n_split = int((clusters["n_clusters"] >= 2).sum())
     assert f"{n_split} of {len(clusters)} residues split into two or more clusters" in readme
-    assert "- Distance to reference: mini_ensemble.pdb model 2." in readme
+    assert "- Distance to reference: two_chains.pdb model 2." in readme
 
 
 def test_readme_suggests_smaller_clusters_when_a_range_is_all_noise(tmp_path: Path) -> None:

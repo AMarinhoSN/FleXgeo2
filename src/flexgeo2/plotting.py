@@ -475,38 +475,6 @@ class ClusterMapPlotter(BasePlotter):
         return fig
 
 
-class ResidueClusterPlotter:
-    def plot(self, residue_cluster_df, output_path: str | Path) -> None:
-        import matplotlib.pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(6, 5), constrained_layout=True)
-        residue_label = residue_cluster_df["residue_label"].iloc[0]
-        chain = residue_cluster_df["chain"].iloc[0]
-        title_prefix = f"Chain {chain}" if chain not in (None, "") else "Chain"
-
-        unique_clusters = sorted(residue_cluster_df["cluster"].drop_duplicates())
-
-        for cluster_label in unique_clusters:
-            cluster_points = residue_cluster_df[residue_cluster_df["cluster"] == cluster_label]
-            ax.scatter(
-                cluster_points["curvature"],
-                cluster_points["torsion"],
-                s=42,
-                alpha=0.85,
-                c=[cluster_color(cluster_label)],
-                label=cluster_legend_label(cluster_label),
-                edgecolors="none",
-            )
-
-        ax.set_title(f"{title_prefix}: {residue_label}")
-        ax.set_xlabel("Curvature")
-        ax.set_ylabel("Torsion")
-        ax.legend(loc="best")
-        ax.grid(alpha=0.3)
-        fig.savefig(output_path, dpi=250, bbox_inches="tight")
-        plt.close(fig)
-
-
 class ResidueRangeClusterPlotter:
     def plot(self, range_cluster_df, output_path: str | Path) -> None:
         import matplotlib.pyplot as plt

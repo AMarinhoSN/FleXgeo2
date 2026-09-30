@@ -124,7 +124,8 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
     OutputFile(
         "geometry/models_by_chain.csv",
         "geometry/models_by_chain.csv",
-        "Per-model summary computed separately for each chain.",
+        "Per-model summary computed separately for each chain (written when the input has "
+        "more than one chain).",
         {"chain": "Chain identifier.", **_MODEL_SUMMARY},
     ),
     OutputFile(
@@ -163,7 +164,7 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
     OutputFile(
         "reference/matrices/*.csv",
         "reference/matrices/<chain>.csv",
-        "Distances as a models x residues matrix, one file per chain.",
+        "Distances as a models x residues matrix, one file per chain (with --distance-matrices).",
     ),
     OutputFile(
         "clusters/assignments.csv",
@@ -193,11 +194,6 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         "Cluster of every model (rows) at every residue (columns); grey is noise. The bars "
         "above show the number of clusters per residue. Labels are assigned independently "
         "at each residue, so cluster 0 at one residue is unrelated to cluster 0 at another.",
-    ),
-    OutputFile(
-        "clusters/residue_plots/*.png",
-        "clusters/residue_plots/<chain>_<residue number>_<name>.png",
-        "Curvature vs torsion scatter plot for each residue, coloured by cluster.",
     ),
     OutputFile(
         "range_clusters/assignments.csv",

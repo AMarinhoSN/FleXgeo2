@@ -88,7 +88,7 @@ from flexgeo2.plotting import DistanceHeatmapPlotter
 plotter = DistanceHeatmapPlotter()
 plotter.plot(distance_long_df, "distance_heatmap.png", title="Reference comparison")
 
-writer = OutputWriter(OutputConfig(output_dir="results", verbose=False))
+writer = OutputWriter(OutputConfig(output_dir="results"))
 artifacts = writer.write(
     result,
     max_models_in_plot=12,
@@ -96,7 +96,7 @@ artifacts = writer.write(
 )
 ```
 
-By default, `FleXgeo2` writes a lean set of summary tables and plots, organised in one folder per analysis (see the output layout below). Use `--output-verbose` to also write per-chain model summaries, distance matrices and one cluster plot per residue.
+By default, `FleXgeo2` writes a lean set of summary tables and plots, organised in one folder per analysis (see the output layout below).
 
 Optional outputs:
 
@@ -107,10 +107,10 @@ flexgeo2 path/to/ensemble.pdb \
   --n-jobs -1
 ```
 
-To also write per-chain model summaries, distance matrices and per-residue cluster plots:
+To also write the distances to the reference as one models x residues matrix per chain:
 
 ```bash
-flexgeo2 path/to/ensemble.pdb --output-verbose
+flexgeo2 path/to/ensemble.pdb --reference-model 1 --distance-matrices
 ```
 
 To hide individual model overlays:
@@ -200,15 +200,12 @@ results/
 All tables are in long ("tidy") format with a `chain` column, so a single chain can be
 selected by filtering that column.
 
-`--output-verbose` adds:
+Two more files are written when they apply:
 
-- `geometry/models_by_chain.csv`: the per-model summary computed separately per chain
-- `reference/matrices/<chain>.csv`: distances as a models x residues matrix
-- `clusters/residue_plots/<chain>_<residue number>_<name>.png`: a curvature vs torsion
-  scatter plot for each clustered residue
-
-Residue plot names start with the zero-padded residue number
-(e.g. `A_0045_ALA.png`), so they sort in sequence order.
+- `geometry/models_by_chain.csv`: the per-model summary computed separately per chain,
+  when the input has more than one chain
+- `reference/matrices/<chain>.csv`: distances as a models x residues matrix, with
+  `--distance-matrices`
 
 FleXgeo2 will not write into an output folder that already contains files, so results
 from different runs never mix. To rerun into the same folder, add `--overwrite`
