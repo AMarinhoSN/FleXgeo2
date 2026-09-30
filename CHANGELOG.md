@@ -73,6 +73,8 @@ model numbers, so results and scripts written for it need updating: see
     `run_manifest`, `cluster_map_plot`, `residue_plots_dir` and `per_chain_plots` are
     new. With more than 4 chains, `overview_plot`, `distance_heatmap` and
     `cluster_map_plot` are `None` and `per_chain_plots` lists the per-chain figures.
+  - `ChainGeometryPlotter` is removed; it was no longer used (`overview.png` shows
+    curvature and torsion) and `AnalysisResult.plot_overview()` draws that figure.
   - `PlotStyle.apply()` is replaced by the `PlotStyle.context()` context manager.
   - `GeometryService.ensure_dependencies()` is removed. It ended the Python session
     with `SystemExit` when a dependency was missing; a missing dependency now raises
@@ -113,6 +115,12 @@ model numbers, so results and scripts written for it need updating: see
 - `AnalysisResult.config` records the configuration that produced a result.
 - `AnalysisResult.save(output_dir, overwrite=False)` writes the output folder for a
   result, with the run's output settings.
+- Figures from a result, as matplotlib `Figure`s, without writing files:
+  `AnalysisResult.plot_overview()`, `plot_distance_heatmap()`, `plot_cluster_map()`,
+  `plot_residue("A:45")` and `plot_residue_range("A:10-20")`; each draws the
+  figure FleXgeo2 writes. `flexgeo2.save_figure(fig, path)` saves one with editable
+  fonts, as FleXgeo2 saves its own. Every plotter has a `render()` that returns the
+  figure instead of saving it.
 
 ### Changed
 

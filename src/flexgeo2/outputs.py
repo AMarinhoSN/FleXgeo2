@@ -177,16 +177,7 @@ class OutputWriter:
                 raw_df=result.raw_df,
                 show_model_traces=not hide_model_traces,
                 max_models_in_plot=max_models_in_plot,
-                cluster_summary_df=(
-                    result.residue_clustering.summary_df
-                    if result.residue_clustering is not None
-                    else None
-                ),
-                distance_summary_df=(
-                    result.distance_result.summary_df
-                    if result.distance_result is not None
-                    else None
-                ),
+                **result._overview_extras(),
             )
             if per_chain:
                 artifacts.per_chain_plots.append(path)
@@ -203,7 +194,7 @@ class OutputWriter:
                 self.distance_plotter.plot(
                     _in_chains(long_df, figure_chains),
                     path,
-                    f"Distance to reference: {result.distance_result.reference_label}",
+                    result.distance_result.heatmap_title,
                 )
                 if per_chain:
                     artifacts.per_chain_plots.append(path)
@@ -283,32 +274,17 @@ class OutputWriter:
         chosen = select_residues(
             parse_residue_selections(self.config.plot_residues), residues_by_chain
         )
-        # Cluster assignments carry the same curvature and torsion plus the cluster label.
-        points = (
-            result.residue_clustering.assignments_df
-            if result.residue_clustering is not None
-            else result.raw_df
-        )
-        reference = result.distance_result.long_df if result.distance_result else None
-
         for chain, order in chosen:
             residue = summary[(summary["chain"] == chain) & (summary["order"] == order)].iloc[0]
-            reference_point = None
-            if reference is not None:
-                rows = reference[(reference["chain"] == chain) & (reference["order"] == order)]
-                if not rows.empty:
-                    reference_point = (
-                        rows["reference_curvature"].iloc[0],
-                        rows["reference_torsion"].iloc[0],
-                    )
+            points, dmax, reference = result._residue_plot_inputs(chain, order)
             self.residue_plotter.plot(
-                points[(points["chain"] == chain) & (points["order"] == order)],
+                points,
                 plots_dir
                 / self.residue_plot_name(
                     names[chain], order, residue["name"], self.config.plot_format
                 ),
-                dmax=residue["dmax"],
-                reference=reference_point,
+                dmax=dmax,
+                reference=reference,
             )
 
     def _plot_range_clusters(self, assignments_df, plots_dir: Path, names: dict) -> None:

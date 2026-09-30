@@ -14,6 +14,7 @@ from flexgeo2.models import (
     ResidueRangeClusteringResult,
 )
 from flexgeo2.pipeline import FlexGeo2App
+from flexgeo2.plotting import save_figure
 
 __all__ = [
     "AnalysisConfig",
@@ -26,4 +27,5 @@ __all__ = [
     "ReferenceConfig",
     "ResidueClusteringResult",
     "ResidueRangeClusteringResult",
+    "save_figure",
 ]

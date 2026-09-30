@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import json
+from dataclasses import fields, replace
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-from flexgeo2 import AnalysisConfig, ClusteringConfig, FlexGeo2App, OutputConfig, ReferenceConfig
+from flexgeo2 import (
+    AnalysisConfig,
+    ClusteringConfig,
+    FlexGeo2App,
+    OutputConfig,
+    ReferenceConfig,
+    save_figure,
+)
 from flexgeo2.cli.main import main
 from flexgeo2.geometry import GeometryService
-from flexgeo2.models import OutputArtifacts
+from flexgeo2.models import AnalysisResult, OutputArtifacts
 from flexgeo2.outputs import OutputDirectoryNotEmptyError
 
 pytest.importorskip("melodia_py")
@@ -275,3 +283,141 @@ def test_run_and_save_leave_the_callers_matplotlib_settings_alone(
         assert dict(plt.rcParams) == user_settings
         result.save(tmp_path / "saved")
         assert dict(plt.rcParams) == user_settings
+
+
+@pytest.fixture(scope="module")
+def full_run(mini_ensemble_pdb: Path, tmp_path_factory: pytest.TempPathFactory):
+    """A run with every analysis and PNG figures, and the folder it wrote."""
+    output_dir = tmp_path_factory.mktemp("full_run")
+    config = AnalysisConfig(
+        pdb_file=mini_ensemble_pdb,
+        reference=ReferenceConfig(model_id="1"),
+        clustering=ClusteringConfig(
+            cluster_residues=True, cluster_residue_ranges=["2-4"], min_cluster_size=2
+        ),
+        output=OutputConfig(output_dir=output_dir, plot_residues=["3"]),
+        max_models_in_plot=2,  # of 3, so the overview shows the run's settings are used
+    )
+    return FlexGeo2App().run(config), output_dir
+
+
+@pytest.mark.parametrize(
+    ("draw", "written", "dpi"),
+    [
+        (lambda result: result.plot_overview(), "overview.png", 300),
+        (lambda result: result.plot_distance_heatmap(), "reference/heatmap.png", 300),
+        (lambda result: result.plot_cluster_map(), "clusters/clusters.png", 300),
+        (lambda result: result.plot_residue(3), "residue_plots/A_0003_ILE.png", 250),
+        (lambda result: result.plot_residue("A:3"), "residue_plots/A_0003_ILE.png", 250),
+        (lambda result: result.plot_residue_range("2-4"), "range_clusters/A_2-4.png", 250),
+        (lambda result: result.plot_overview(chains="A"), "overview.png", 300),
+    ],
+)
+def test_plot_methods_draw_the_figures_a_run_writes(
+    full_run, tmp_path: Path, draw, written: str, dpi: int
+) -> None:
+    import matplotlib.pyplot as plt
+
+    result, output_dir = full_run
+    figure = draw(result)
+
+    save_figure(figure, tmp_path / "figure.png", dpi=dpi)
+    plt.close(figure)
+
+    assert (tmp_path / "figure.png").read_bytes() == (output_dir / written).read_bytes()
+
+
+@pytest.mark.parametrize(
+    ("draw", "chains"),
+    [
+        (lambda result: result.plot_overview(), ["A", "B"]),
+        (lambda result: result.plot_overview(chains="B"), ["B"]),
+        (lambda result: result.plot_distance_heatmap(chains=["B"]), ["B"]),
+        (lambda result: result.plot_cluster_map(chains=["A"]), ["A"]),
+    ],
+)
+def test_plot_methods_draw_the_chosen_chains(full_run, draw, chains: list[str]) -> None:
+    import matplotlib.pyplot as plt
+
+    result, _ = full_run
+    two_chains = with_copy_as_chain_b(result)
+
+    figure = draw(two_chains)
+
+    titles = " ".join(axis.get_title() for axis in figure.axes)
+    plt.close(figure)
+    assert [chain for chain in ("A", "B") if f"Chain {chain}" in titles] == chains
+
+
+def with_copy_as_chain_b(result: AnalysisResult) -> AnalysisResult:
+    """The result with every table's chain A rows repeated as chain B."""
+
+    def doubled(df: pd.DataFrame) -> pd.DataFrame:
+        return pd.concat([df, df.assign(chain="B")], ignore_index=True)
+
+    def doubled_tables(analysis):
+        return replace(
+            analysis,
+            **{
+                field.name: doubled(getattr(analysis, field.name))
+                for field in fields(analysis)
+                if field.name.endswith("_df")
+            },
+        )
+
+    copy = doubled_tables(result)
+    copy.distance_result = doubled_tables(result.distance_result)
+    copy.residue_clustering = doubled_tables(result.residue_clustering)
+    return copy
+
+
+@pytest.mark.parametrize(
+    ("draw", "message"),
+    [
+        (lambda result: result.plot_overview(chains=["B"]), r"Chain\(s\) B not in this result"),
+        (lambda result: result.plot_residue("2-3"), "matches 2 residues"),
+        (lambda result: result.plot_residue("99"), "99 not found"),
+        (lambda result: result.plot_residue_range("3-5"), "is not a clustered range.*A:2-4"),
+        (lambda result: result.plot_residue_range("2-4,3-5"), "Give one residue range"),
+    ],
+)
+def test_plot_methods_explain_bad_selections(full_run, draw, message: str) -> None:
+    result, _ = full_run
+
+    with pytest.raises(ValueError, match=message):
+        draw(result)
+
+
+@pytest.mark.parametrize(
+    ("draw", "message"),
+    [
+        (lambda result: result.plot_distance_heatmap(), "needs a run with a reference"),
+        (lambda result: result.plot_cluster_map(), "needs a run with per-residue clustering"),
+        (lambda result: result.plot_residue_range("2-4"), "needs a run with range clustering"),
+    ],
+)
+def test_plot_methods_name_the_analysis_they_need(
+    mini_ensemble_pdb: Path, draw, message: str
+) -> None:
+    result = FlexGeo2App().run(AnalysisConfig(pdb_file=mini_ensemble_pdb))
+
+    with pytest.raises(ValueError, match=message):
+        draw(result)
+
+
+def test_save_figure_embeds_editable_fonts_whatever_the_session_uses(
+    full_run, tmp_path: Path
+) -> None:
+    import matplotlib.pyplot as plt
+
+    result, _ = full_run
+    figure = result.plot_residue(3)
+
+    with plt.rc_context({"pdf.fonttype": 3}):
+        save_figure(figure, tmp_path / "residue.pdf")
+        figure.savefig(tmp_path / "session.pdf")
+
+    assert plt.fignum_exists(figure.number)  # left open for the caller
+    plt.close(figure)
+    assert b"/Type3" not in (tmp_path / "residue.pdf").read_bytes()
+    assert b"/Type3" in (tmp_path / "session.pdf").read_bytes()

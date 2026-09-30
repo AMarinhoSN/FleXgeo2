@@ -154,6 +154,18 @@ def styled(method):
     return wrapper
 
 
+def save_figure(figure, path: str | Path, dpi: int = 300) -> None:
+    """Save a figure from ``render()`` or ``AnalysisResult.plot_*()`` as FleXgeo2 does.
+
+    Some settings apply when a figure is saved rather than drawn: with this function a
+    PDF embeds TrueType fonts and an SVG keeps text as text, so the figure stays
+    editable. ``figure.savefig()`` would use the session's settings instead (Type 3
+    fonts in PDF by default, which some journals reject). The figure stays open.
+    """
+    with PlotStyle.context():
+        figure.savefig(path, dpi=dpi, bbox_inches="tight")
+
+
 class BasePlotter:
     @staticmethod
     def apply_residue_ticks(axis) -> None:
@@ -181,75 +193,6 @@ class BasePlotter:
                 alpha=0.22,
                 linewidth=1,
             )
-
-
-class ChainGeometryPlotter(BasePlotter):
-    @styled
-    def plot(
-        self,
-        chain_raw_df,
-        chain_summary_df,
-        output_path: str | Path,
-        show_model_traces: bool,
-        max_models_in_plot: int,
-    ) -> None:
-        import matplotlib.pyplot as plt
-
-        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(12, 8), constrained_layout=True)
-
-        x_values = chain_summary_df["order"].to_numpy()
-        chain_id = chain_summary_df["chain"].iloc[0] if not chain_summary_df.empty else None
-        title_suffix = f"Chain {chain_id}" if chain_id not in (None, "") else "Chain"
-
-        if show_model_traces:
-            self.plot_model_traces(axes[0], axes[1], chain_raw_df, max_models_in_plot)
-
-        axes[0].fill_between(
-            x_values,
-            chain_summary_df["curvature_mean"] - chain_summary_df["curvature_std"],
-            chain_summary_df["curvature_mean"] + chain_summary_df["curvature_std"],
-            color="#4c78a8",
-            alpha=0.18,
-            label="Ensemble SD",
-        )
-        axes[0].plot(
-            x_values,
-            chain_summary_df["curvature_mean"],
-            color="#1f4e79",
-            linewidth=2.5,
-            label="Ensemble mean",
-        )
-        axes[0].set_title(f"{title_suffix}: Curvature")
-        axes[0].set_ylabel("Curvature")
-        axes[0].legend(loc="upper right")
-
-        axes[1].fill_between(
-            x_values,
-            chain_summary_df["torsion_mean"] - chain_summary_df["torsion_std"],
-            chain_summary_df["torsion_mean"] + chain_summary_df["torsion_std"],
-            color="#e45756",
-            alpha=0.18,
-            label="Ensemble SD",
-        )
-        axes[1].plot(
-            x_values,
-            chain_summary_df["torsion_mean"],
-            color="#b22222",
-            linewidth=2.5,
-            label="Ensemble mean",
-        )
-        axes[1].set_title(f"{title_suffix}: Torsion")
-        axes[1].set_ylabel("Torsion")
-        axes[1].set_xlabel("Residue")
-        axes[1].legend(loc="upper right")
-
-        for axis in axes:
-            axis.grid(alpha=0.3)
-            self.apply_residue_ticks(axis)
-
-        fig.suptitle("Backbone Differential Geometry", fontsize=16, fontweight="bold")
-        fig.savefig(output_path, dpi=300, bbox_inches="tight")
-        plt.close(fig)
 
 
 class OverviewPlotter(BasePlotter):
@@ -651,8 +594,18 @@ class ResiduePlotter:
 
 
 class ResidueRangeClusterPlotter:
+    """Models of one clustered residue range on its first two principal components."""
+
     @styled
     def plot(self, range_cluster_df, output_path: str | Path) -> None:
+        import matplotlib.pyplot as plt
+
+        fig = self.render(range_cluster_df)
+        fig.savefig(output_path, dpi=250, bbox_inches="tight")
+        plt.close(fig)
+
+    @styled
+    def render(self, range_cluster_df):
         import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots(figsize=(6.5, 5.5), constrained_layout=True)
@@ -680,5 +633,4 @@ class ResidueRangeClusterPlotter:
         ax.set_ylabel("PC2")
         ax.legend(loc="best")
         ax.grid(alpha=0.3)
-        fig.savefig(output_path, dpi=250, bbox_inches="tight")
-        plt.close(fig)
+        return fig

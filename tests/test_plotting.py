@@ -13,7 +13,6 @@ from flexgeo2.geometry import GeometryService
 from flexgeo2.plotting import (
     NOISE_COLOR,
     OTHER_CLUSTERS_COLOR,
-    ChainGeometryPlotter,
     ClusterMapPlotter,
     DistanceHeatmapPlotter,
     OverviewPlotter,
@@ -144,14 +143,6 @@ def range_cluster_df(clusters: list[int], chain: str = "A") -> pd.DataFrame:
     )
 
 
-def chain_frames(normalized_geometry_df: pd.DataFrame, chain: str = "A"):
-    summary_df = GeometryService().summarize(normalized_geometry_df)
-    return (
-        normalized_geometry_df[normalized_geometry_df["chain"] == chain],
-        summary_df[summary_df["chain"] == chain],
-    )
-
-
 def two_chain_distances(distance_long_df: pd.DataFrame) -> pd.DataFrame:
     return pd.concat([distance_long_df, distance_long_df.assign(chain="B")], ignore_index=True)
 
@@ -160,18 +151,14 @@ def legend_labels(figure: Figure) -> list[str]:
     return [text.get_text() for text in figure.axes[0].get_legend().get_texts()]
 
 
-PLOTTERS = ["chain", "overview", "heatmap", "range_cluster", "cluster_map", "residue"]
+PLOTTERS = ["overview", "heatmap", "range_cluster", "cluster_map", "residue"]
 
 
 def plot_with(plotter: str, output, normalized_geometry_df, distance_long_df) -> None:
     """Draw and save one plotter's figure from small example data."""
-    chain_raw_df, chain_summary_df = chain_frames(normalized_geometry_df)
     map_summary, map_assignments = cluster_map_frames({1: [0, 0, 1], 2: [-1, 0, 0]})
     overview_summary = GeometryService().summarize(normalized_geometry_df)
     calls = {
-        "chain": lambda: ChainGeometryPlotter().plot(
-            chain_raw_df, chain_summary_df, output, show_model_traces=True, max_models_in_plot=12
-        ),
         "overview": lambda: OverviewPlotter().plot(
             overview_summary,
             output,
@@ -247,37 +234,6 @@ def test_render_uses_the_style_without_changing_the_callers(
     plt.close(figure)
 
 
-@pytest.mark.parametrize(
-    ("show_model_traces", "max_models", "expected_traces"),
-    [(True, 12, 2), (True, 1, 1), (True, 0, 0), (False, 12, 0)],
-)
-def test_chain_plot_titles_and_model_traces(
-    normalized_geometry_df: pd.DataFrame,
-    saved_figures: list[Figure],
-    tmp_path,
-    show_model_traces: bool,
-    max_models: int,
-    expected_traces: int,
-) -> None:
-    chain_raw_df, chain_summary_df = chain_frames(normalized_geometry_df)
-
-    ChainGeometryPlotter().plot(
-        chain_raw_df,
-        chain_summary_df,
-        tmp_path / "chain.png",
-        show_model_traces=show_model_traces,
-        max_models_in_plot=max_models,
-    )
-
-    [figure] = saved_figures
-    curvature_axis, torsion_axis = figure.axes
-    assert curvature_axis.get_title() == "Chain A: Curvature"
-    assert torsion_axis.get_title() == "Chain A: Torsion"
-    for axis in (curvature_axis, torsion_axis):
-        # One line for the ensemble mean plus one per model trace.
-        assert len(axis.get_lines()) == 1 + expected_traces
-
-
 def test_range_cluster_plot_labels_noise_and_clusters(
     saved_figures: list[Figure], tmp_path
 ) -> None:
@@ -287,6 +243,8 @@ def test_range_cluster_plot_labels_noise_and_clusters(
     assert legend_labels(figure) == ["Noise", "Cluster 0", "Cluster 1"]
     noise_collection = figure.axes[0].collections[0]
     assert noise_collection.get_facecolor()[0][:3] == pytest.approx((0x9E / 255,) * 3)
+    # Every point is labelled with its model.
+    assert [text.get_text() for text in figure.axes[0].texts] == ["1", "2", "3", "4", "5", "6"]
 
 
 def test_range_cluster_plot_handles_blank_chain_and_many_clusters(

@@ -62,8 +62,14 @@ from flexgeo2 import AnalysisConfig, FlexGeo2App
 config = AnalysisConfig(pdb_file="ensemble.pdb")
 result = FlexGeo2App().run(config)  # results in memory; no files written
 result.residue_summary_df.nlargest(5, "dmax")
+fig = result.plot_overview()  # any figure FleXgeo2 writes, as a matplotlib Figure
 result.save("results")  # the same folder the CLI writes: tables, figures, README.md, run.json
 ```
+
+Figures: `plot_overview()`, `plot_distance_heatmap()`, `plot_cluster_map()`,
+`plot_residue("A:45")` and `plot_residue_range("A:10-20")`. Save one with
+`flexgeo2.save_figure(fig, "figure.pdf")` to keep its fonts editable, as in the files
+FleXgeo2 writes.
 
 To write the files during the run instead, set `output=OutputConfig(output_dir="results")`.
 
@@ -97,6 +103,7 @@ from flexgeo2.plotting import DistanceHeatmapPlotter
 
 plotter = DistanceHeatmapPlotter()
 plotter.plot(distance_long_df, "distance_heatmap.png", title="Reference comparison")
+fig = plotter.render(distance_long_df, title="Reference comparison")  # a Figure, not saved
 
 writer = OutputWriter(OutputConfig(output_dir="results"))
 artifacts = writer.write(

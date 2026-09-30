@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     # Imported for annotations only: pandas takes most of a second to import, and
     # `import flexgeo2` (and `flexgeo2 --help`) should stay fast.
     import pandas as pd
+    from matplotlib.figure import Figure
 
 
 @dataclass(slots=True)
@@ -26,6 +27,10 @@ class DistanceResult:
     long_df: pd.DataFrame
     summary_df: pd.DataFrame
     reference_label: str
+
+    @property
+    def heatmap_title(self) -> str:
+        return f"Distance to reference: {self.reference_label}"
 
 
 @dataclass(slots=True)
@@ -131,3 +136,148 @@ class AnalysisResult:
             hide_model_traces=config.hide_model_traces,
         )
         return self.outputs
+
+    # Figures. Each returns a matplotlib Figure drawn in the FleXgeo2 style; save it with
+    # flexgeo2.save_figure() to get the same editable fonts as the files FleXgeo2 writes.
+
+    def plot_overview(self, chains: str | list[str] | None = None) -> Figure:
+        """Curvature, torsion, dmax and, when they ran, clusters per residue and distance to
+        the reference along the sequence (``overview.png``), for all or the given chains."""
+        from flexgeo2.plotting import OverviewPlotter
+
+        config = self._run_config()
+        return OverviewPlotter().render(
+            self._in_chains(self.residue_summary_df, chains),
+            raw_df=self.raw_df,
+            show_model_traces=not config.hide_model_traces,
+            max_models_in_plot=config.max_models_in_plot,
+            **self._overview_extras(),
+        )
+
+    def plot_distance_heatmap(self, chains: str | list[str] | None = None) -> Figure:
+        """Distance of every model to the reference at every residue
+        (``reference/heatmap.png``). Needs a run with a reference."""
+        from flexgeo2.plotting import DistanceHeatmapPlotter
+
+        distance = self._needs(self.distance_result, "a reference (reference=ReferenceConfig)")
+        return DistanceHeatmapPlotter().render(
+            self._in_chains(distance.long_df, chains), distance.heatmap_title
+        )
+
+    def plot_cluster_map(self, chains: str | list[str] | None = None) -> Figure:
+        """Cluster of every model at every residue (``clusters/clusters.png``). Needs a run
+        with per-residue clustering."""
+        from flexgeo2.plotting import ClusterMapPlotter
+
+        clustering = self._needs(
+            self.residue_clustering, "per-residue clustering (cluster_residues=True)"
+        )
+        return ClusterMapPlotter().render(
+            self._in_chains(clustering.summary_df, chains),
+            self._in_chains(clustering.assignments_df, chains),
+        )
+
+    def plot_residue(self, residue: str | int) -> Figure:
+        """Curvature vs torsion of one residue, one point per model (as ``residue_plots/``).
+
+        ``residue`` is a residue number, or ``"A:45"`` to name the chain; points are
+        coloured by cluster when per-residue clustering ran.
+        """
+        from flexgeo2.plotting import ResiduePlotter
+        from flexgeo2.selection import parse_residue_selections, select_residues
+
+        residues_by_chain = {
+            chain: set(group["order"])
+            for chain, group in self.residue_summary_df.groupby("chain", dropna=False)
+        }
+        chosen = select_residues(parse_residue_selections([str(residue)]), residues_by_chain)
+        if len(chosen) != 1:
+            found = ", ".join(f"{chain}:{order}" for chain, order in chosen)
+            raise ValueError(
+                f"Residue '{residue}' matches {len(chosen)} residues ({found}); give one "
+                "residue, with its chain if needed (e.g. 'A:45')."
+            )
+        points, dmax, reference = self._residue_plot_inputs(*chosen[0])
+        return ResiduePlotter().render(points, dmax=dmax, reference=reference)
+
+    def plot_residue_range(self, residues: str) -> Figure:
+        """Models of one clustered residue range on its first two principal components
+        (``range_clusters/<chain>_<start-end>.png``), e.g. ``"10-20"`` or ``"A:10-20"``.
+        Needs a run that clustered that range."""
+        from flexgeo2.plotting import ResidueRangeClusterPlotter
+        from flexgeo2.selection import parse_residue_selections
+
+        clustering = self._needs(
+            self.residue_range_clustering,
+            "range clustering (cluster_residue_ranges=[...])",
+        )
+        assignments = clustering.assignments_df
+        selections = parse_residue_selections([residues])
+        if len(selections) != 1:
+            raise ValueError(
+                f"Give one residue range, e.g. '10-20' or 'A:10-20', not '{residues}'."
+            )
+        [selection] = selections
+        matches = assignments[
+            (assignments["range_start"] == selection.start)
+            & (assignments["range_end"] == selection.end)
+            & (selection.chain is None or assignments["chain"] == selection.chain)
+        ]
+        ranges = matches[["chain", "range_label"]].drop_duplicates()
+        if len(ranges) != 1:
+            clustered = assignments[["chain", "range_label"]].drop_duplicates()
+            listed = ", ".join(f"{row.chain}:{row.range_label}" for row in clustered.itertuples())
+            problem = "is not a clustered range" if ranges.empty else "is in several chains"
+            raise ValueError(f"Residue range '{residues}' {problem}. Clustered: {listed}.")
+        return ResidueRangeClusterPlotter().render(matches)
+
+    def _run_config(self) -> AnalysisConfig:
+        return self.config or AnalysisConfig(pdb_file=self.pdb_file)
+
+    @staticmethod
+    def _needs(analysis, what: str):
+        if analysis is None:
+            raise ValueError(f"This figure needs a run with {what}.")
+        return analysis
+
+    @staticmethod
+    def _in_chains(df: pd.DataFrame, chains: str | list[str] | None) -> pd.DataFrame:
+        if chains is None:
+            return df
+        chains = [chains] if isinstance(chains, str) else list(chains)
+        available = list(df["chain"].drop_duplicates())
+        missing = [chain for chain in chains if chain not in available]
+        if missing:
+            raise ValueError(
+                f"Chain(s) {', '.join(map(str, missing))} not in this result "
+                f"({', '.join(map(str, available))})."
+            )
+        return df[df["chain"].isin(chains)]
+
+    def _overview_extras(self) -> dict:
+        """The optional overview panels: clusters per residue, distance to the reference."""
+        return {
+            "cluster_summary_df": (
+                self.residue_clustering.summary_df if self.residue_clustering else None
+            ),
+            "distance_summary_df": (
+                self.distance_result.summary_df if self.distance_result else None
+            ),
+        }
+
+    def _residue_plot_inputs(self, chain, order: int):
+        """``(points, dmax, reference)`` for the curvature vs torsion plot of a residue."""
+        # Cluster assignments carry the same curvature and torsion plus the cluster label.
+        points = self.residue_clustering.assignments_df if self.residue_clustering else self.raw_df
+        summary = self.residue_summary_df
+        dmax = summary[(summary["chain"] == chain) & (summary["order"] == order)]["dmax"].iloc[0]
+        reference = None
+        if self.distance_result is not None:
+            rows = self.distance_result.long_df
+            rows = rows[(rows["chain"] == chain) & (rows["order"] == order)]
+            if not rows.empty:
+                reference = (
+                    rows["reference_curvature"].iloc[0],
+                    rows["reference_torsion"].iloc[0],
+                )
+        return points[(points["chain"] == chain) & (points["order"] == order)], dmax, reference
