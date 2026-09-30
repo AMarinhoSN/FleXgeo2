@@ -55,7 +55,6 @@ def test_build_config_maps_cli_flags() -> None:
     assert config.output.distance_matrices is True
     assert config.output.plot_residues == ["10,A:11", "12-13"]
     assert config.output.plot_format == "svg"
-    assert config.output.write_files is True
     assert config.output.overwrite is True
     assert config.chains == ["A", "B"]
     assert config.n_jobs == 2

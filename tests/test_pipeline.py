@@ -246,7 +246,7 @@ def test_app_run_with_reference_model_wires_distance_result(
         hide_model_traces=True,
         dmax_outlier_fraction=0.05,
         reference=ReferenceConfig(model_id="1"),
-        output=OutputConfig(write_files=False),
+        output=OutputConfig(),
     )
 
     result = app.run(config)
@@ -265,7 +265,7 @@ def test_app_run_with_reference_model_wires_distance_result(
         "build_model_summary",
     ]
     assert distances.calls == ["select_reference_rows:1", "compute:input model 1"]
-    assert FakeOutputWriter.instances[0].config.write_files is False
+    assert FakeOutputWriter.instances[0].config.output_dir is None
     assert FakeOutputWriter.instances[0].write_calls == [(4, True)]
     assert result.outputs == OutputArtifacts(raw_csv=Path("raw.csv"))
 
@@ -276,7 +276,7 @@ def test_app_run_without_optional_analyses(
     clustering: FakeClusteringService,
     pdb_file: Path,
 ) -> None:
-    config = AnalysisConfig(pdb_file=pdb_file, output=OutputConfig(write_files=False))
+    config = AnalysisConfig(pdb_file=pdb_file, output=OutputConfig())
 
     result = app.run(config)
 
@@ -300,7 +300,7 @@ def test_app_run_with_reference_pdb_loads_and_filters_reference(
         chains=["A"],
         n_jobs=3,
         reference=ReferenceConfig(pdb_file=reference_pdb, pdb_model_id="2"),
-        output=OutputConfig(write_files=False),
+        output=OutputConfig(),
     )
 
     result = app.run(config)
@@ -333,7 +333,7 @@ def test_app_run_with_reference_pdb_defaults_to_first_model(
     config = AnalysisConfig(
         pdb_file=pdb_file,
         reference=ReferenceConfig(pdb_file=reference_pdb),
-        output=OutputConfig(write_files=False),
+        output=OutputConfig(),
     )
 
     result = app.run(config)
@@ -356,7 +356,7 @@ def test_app_run_wires_both_clustering_modes(
             min_cluster_size=3,
             min_samples=2,
         ),
-        output=OutputConfig(write_files=False),
+        output=OutputConfig(),
     )
 
     result = app.run(config)
@@ -410,7 +410,7 @@ def test_app_run_validates_before_computing_geometry(
     overrides: dict,
     message: str,
 ) -> None:
-    config = AnalysisConfig(pdb_file=pdb_file, output=OutputConfig(write_files=False), **overrides)
+    config = AnalysisConfig(pdb_file=pdb_file, output=OutputConfig(), **overrides)
 
     with pytest.raises(ValueError, match=message):
         app.run(config)
@@ -428,7 +428,7 @@ def test_app_run_validates_reference_pdb_model_before_computing_geometry(
     config = AnalysisConfig(
         pdb_file=pdb_file,
         reference=ReferenceConfig(pdb_file=reference_pdb, pdb_model_id="9"),
-        output=OutputConfig(write_files=False),
+        output=OutputConfig(),
     )
 
     with pytest.raises(ValueError, match="not found in the reference PDB"):

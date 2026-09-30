@@ -49,14 +49,12 @@ def make_writer(
     output_dir: Path | None,
     plotters: dict[str, RecordingPlotter],
     distance_matrices: bool = False,
-    write_files: bool = True,
     overwrite: bool = False,
     plot_residues: list[str] | None = None,
 ) -> OutputWriter:
     config = OutputConfig(
         output_dir=output_dir,
         distance_matrices=distance_matrices,
-        write_files=write_files,
         overwrite=overwrite,
         plot_residues=plot_residues or [],
     )
@@ -180,25 +178,23 @@ FULL_WITH_MATRICES_FILES = FULL_DEFAULT_FILES | {
 }
 
 
-def test_write_files_disabled_writes_nothing(
-    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+def test_no_output_dir_writes_nothing(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    output_dir = tmp_path / "out"
+    monkeypatch.chdir(tmp_path)
 
-    artifacts = make_writer(output_dir, plotters, write_files=False).write(
+    artifacts = make_writer(None, plotters).write(
         full_result, max_models_in_plot=12, hide_model_traces=False
     )
 
     assert artifacts == OutputArtifacts()
-    assert not output_dir.exists()
+    assert list(tmp_path.iterdir()) == []
     assert all(not plotter.calls for plotter in plotters.values())
 
 
-def test_missing_output_dir_is_rejected(plotters: dict, base_result: AnalysisResult) -> None:
-    with pytest.raises(ValueError, match="output_dir must be set"):
-        make_writer(None, plotters).write(
-            base_result, max_models_in_plot=12, hide_model_traces=False
-        )
+def test_output_config_writes_nothing_by_default() -> None:
+    # Library use keeps results in memory; the CLI always sets an output folder.
+    assert OutputConfig().output_dir is None
 
 
 def test_default_mode_writes_only_core_outputs(
@@ -717,3 +713,16 @@ def test_chain_ids_that_differ_only_by_case_get_distinct_file_names(
         "residue_plots/A_0001_ALA.png",
         "residue_plots/a_lower_0001_ALA.png",
     } <= files
+
+
+def test_save_without_a_run_config_uses_the_default_output_settings(
+    tmp_path: Path, base_result: AnalysisResult
+) -> None:
+    # A result assembled by hand has no AnalysisConfig; save() still writes a full folder.
+    assert base_result.config is None
+
+    artifacts = base_result.save(tmp_path / "out")
+
+    assert written_files(tmp_path / "out") == BASE_FILES
+    assert artifacts.overview_plot == (tmp_path / "out").resolve() / "overview.png"
+    assert base_result.config.output.output_dir == tmp_path / "out"

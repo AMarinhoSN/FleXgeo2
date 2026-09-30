@@ -65,6 +65,10 @@ model numbers, so results and scripts written for it need updating: see
 - **Python API**:
   - `OutputConfig.verbose` is replaced by `OutputConfig.distance_matrices`;
     `OutputConfig.overwrite` is new.
+  - `FlexGeo2App().run()` no longer writes files by default: `OutputConfig.output_dir`
+    defaults to `None` (was `results`), and files are written only when it is set.
+    `OutputConfig.write_files` is removed. Use `AnalysisResult.save(output_dir)` to write
+    a result after the run. The CLI is unchanged (`--output-dir`, default `results`).
   - `OutputArtifacts`: `chains_dir` and `cluster_plots_dir` are removed; `readme`,
     `run_manifest`, `cluster_map_plot`, `residue_plots_dir` and `per_chain_plots` are
     new. With more than 4 chains, `overview_plot`, `distance_heatmap` and
@@ -102,6 +106,8 @@ model numbers, so results and scripts written for it need updating: see
 - The CLI rejects invalid values for `--cluster-min-size`, `--cluster-min-samples`,
   `--max-models-in-plot` and `--n-jobs`.
 - `AnalysisResult.config` records the configuration that produced a result.
+- `AnalysisResult.save(output_dir, overwrite=False)` writes the output folder for a
+  result, with the run's output settings.
 
 ### Changed
 

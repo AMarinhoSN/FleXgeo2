@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
-from flexgeo2.config import AnalysisConfig
+from flexgeo2.config import AnalysisConfig, PathLike
 
 
 @dataclass(slots=True)
@@ -62,3 +62,26 @@ class AnalysisResult:
     residue_range_clustering: ResidueRangeClusteringResult | None = None
     config: AnalysisConfig | None = None
     outputs: OutputArtifacts | None = None
+
+    def save(self, output_dir: PathLike, overwrite: bool = False) -> OutputArtifacts:
+        """Write the output folder for this result: tables, figures, README.md, run.json.
+
+        Uses the run's output settings (plot format, residue plots, distance matrices)
+        with ``output_dir``. Like a run, it refuses a folder that already has files unless
+        ``overwrite`` is true. Returns the paths written, also kept in ``outputs``.
+        """
+        from flexgeo2.outputs import OutputWriter, check_output_dir
+        from flexgeo2.plotting import PlotStyle
+
+        config = self.config or AnalysisConfig(pdb_file=self.pdb_file)
+        output = replace(config.output, output_dir=output_dir, overwrite=overwrite)
+        check_output_dir(output)
+        # run.json and README.md describe the configuration the files were written with.
+        self.config = replace(config, output=output)
+        PlotStyle.apply()
+        self.outputs = OutputWriter(output).write(
+            self,
+            max_models_in_plot=config.max_models_in_plot,
+            hide_model_traces=config.hide_model_traces,
+        )
+        return self.outputs

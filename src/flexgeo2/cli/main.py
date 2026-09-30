@@ -206,7 +206,6 @@ def build_config(args: argparse.Namespace) -> AnalysisConfig:
         distance_matrices=args.distance_matrices,
         plot_residues=args.plot_residues or [],
         plot_format=args.plot_format,
-        write_files=True,
         overwrite=args.overwrite,
     )
 

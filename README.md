@@ -60,8 +60,12 @@ Library usage:
 from flexgeo2 import AnalysisConfig, FlexGeo2App
 
 config = AnalysisConfig(pdb_file="ensemble.pdb")
-result = FlexGeo2App().run(config)
+result = FlexGeo2App().run(config)  # results in memory; no files written
+result.residue_summary_df.nlargest(5, "dmax")
+result.save("results")  # the same folder the CLI writes: tables, figures, README.md, run.json
 ```
+
+To write the files during the run instead, set `output=OutputConfig(output_dir="results")`.
 
 Service-level usage:
 

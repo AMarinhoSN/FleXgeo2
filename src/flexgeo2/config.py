@@ -38,8 +38,9 @@ class ClusteringConfig:
 class OutputConfig:
     """Output policy for file writing."""
 
-    output_dir: PathLike | None = Path("results")
-    write_files: bool = True
+    # Folder for the tables, figures, README.md and run.json. None (the default) keeps the
+    # results in memory only; AnalysisResult.save() can write them later.
+    output_dir: PathLike | None = None
     # Also write the distances to the reference as one models x residues CSV per chain.
     distance_matrices: bool = False
     # Residues to plot (curvature vs torsion), e.g. ["45", "A:50-52"]; see selection.py.

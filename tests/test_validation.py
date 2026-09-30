@@ -107,11 +107,8 @@ def test_validate_config_rejects_non_empty_output_dir(pdb_file: Path, tmp_path: 
     validate_config(
         AnalysisConfig(pdb_file=pdb_file, output=OutputConfig(output_dir=tmp_path, overwrite=True))
     )
-    validate_config(
-        AnalysisConfig(
-            pdb_file=pdb_file, output=OutputConfig(output_dir=tmp_path, write_files=False)
-        )
-    )
+    # No output_dir: nothing is written, so a full folder does not matter.
+    validate_config(AnalysisConfig(pdb_file=pdb_file, output=OutputConfig()))
 
 
 def test_validate_against_structure_accepts_valid_selection(

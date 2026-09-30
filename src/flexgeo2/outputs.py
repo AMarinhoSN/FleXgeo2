@@ -46,10 +46,8 @@ def check_output_dir(config: OutputConfig) -> None:
     Hidden files (e.g. ``.DS_Store``) do not count. With ``overwrite=True`` a folder
     holding an earlier run is accepted; ``remove_previous_outputs`` clears it later.
     """
-    if not config.write_files:
-        return
     if config.output_dir is None:
-        raise ValueError("OutputConfig.output_dir must be set when write_files=True.")
+        return
 
     output_dir = Path(config.output_dir).resolve()
     if not output_dir.exists():
@@ -105,7 +103,7 @@ class OutputWriter:
         DistanceService.to_matrix(distance_long_df).to_csv(output_path)
 
     def write(self, result: AnalysisResult, max_models_in_plot: int, hide_model_traces: bool):
-        if not self.config.write_files:
+        if self.config.output_dir is None:
             return OutputArtifacts()
 
         check_output_dir(self.config)

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from flexgeo2 import AnalysisConfig, ClusteringConfig, FlexGeo2App, OutputConfig, ReferenceConfig
 from flexgeo2.cli.main import main
 from flexgeo2.geometry import GeometryService
+from flexgeo2.models import OutputArtifacts
+from flexgeo2.outputs import OutputDirectoryNotEmptyError
 
 pytest.importorskip("melodia_py")
 
@@ -197,3 +201,64 @@ def test_cli_rejects_residue_plots_outside_the_structure_before_melodia(
 
     assert exit_code == 1
     assert "residue(s) 11, 12 not found in chain(s) A" in capsys.readouterr().err
+
+
+def saving_config(pdb_file: Path, output_dir: Path | None = None) -> AnalysisConfig:
+    return AnalysisConfig(
+        pdb_file=pdb_file,
+        reference=ReferenceConfig(model_id="1"),
+        clustering=ClusteringConfig(cluster_residues=True, min_cluster_size=2),
+        output=OutputConfig(output_dir=output_dir, plot_format="svg", plot_residues=["3"]),
+    )
+
+
+def output_files(output_dir: Path) -> list[str]:
+    return sorted(
+        p.relative_to(output_dir).as_posix() for p in output_dir.rglob("*") if p.is_file()
+    )
+
+
+def test_library_run_writes_nothing_by_default(mini_ensemble_pdb: Path, tmp_path: Path) -> None:
+    # The autouse fixture runs each test in tmp_path, the old default folder's parent.
+    result = FlexGeo2App().run(AnalysisConfig(pdb_file=mini_ensemble_pdb))
+
+    assert result.outputs == OutputArtifacts()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_save_writes_what_a_run_with_an_output_dir_writes(
+    mini_ensemble_pdb: Path, tmp_path: Path
+) -> None:
+    written = tmp_path / "written"
+    FlexGeo2App().run(saving_config(mini_ensemble_pdb, written))
+    result = FlexGeo2App().run(saving_config(mini_ensemble_pdb))
+    saved = tmp_path / "saved"
+
+    artifacts = result.save(saved)
+
+    assert output_files(saved) == output_files(written)
+    assert "residue_plots/A_0003_ILE.svg" in output_files(saved)  # the run's output settings
+    assert result.outputs is artifacts
+    assert artifacts.overview_plot == saved.resolve() / "overview.svg"
+    manifest = json.loads((saved / "run.json").read_text())
+    assert manifest["parameters"]["output"]["output_dir"] == str(saved)
+    assert result.config.output.output_dir == saved
+
+
+def test_save_refuses_a_folder_with_files_unless_overwriting(
+    mini_ensemble_pdb: Path, tmp_path: Path
+) -> None:
+    result = FlexGeo2App().run(saving_config(mini_ensemble_pdb))
+    folder = tmp_path / "out"
+    folder.mkdir()
+    (folder / "notes.txt").write_text("keep me")
+
+    with pytest.raises(OutputDirectoryNotEmptyError):
+        result.save(folder)
+    assert result.config.output.output_dir is None  # unchanged by the refused save
+
+    result.save(folder, overwrite=True)
+    result.save(folder, overwrite=True)  # replaces its own earlier outputs
+
+    assert (folder / "notes.txt").read_text() == "keep me"
+    assert (folder / "README.md").is_file()

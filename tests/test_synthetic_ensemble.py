@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from flexgeo2 import AnalysisConfig, ClusteringConfig, FlexGeo2App, OutputConfig
+from flexgeo2 import AnalysisConfig, ClusteringConfig, FlexGeo2App
 from flexgeo2.geometry import GeometryService
 
 pytest.importorskip("melodia_py")
@@ -117,7 +117,6 @@ def analysed(request):
             cluster_residue_ranges=ensemble.switch_windows + ensemble.far_windows,
             min_cluster_size=MIN_CLUSTER_SIZE,
         ),
-        output=OutputConfig(write_files=False),
     )
     return ensemble, FlexGeo2App().run(config)
 

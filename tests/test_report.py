@@ -9,7 +9,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from flexgeo2 import AnalysisConfig, ClusteringConfig, FlexGeo2App, OutputConfig
+from flexgeo2 import AnalysisConfig, ClusteringConfig, FlexGeo2App
 from flexgeo2.cli.main import main
 from flexgeo2.report import file_guide, render_readme, render_terminal_summary, written_files
 
@@ -220,7 +220,6 @@ def test_readme_suggests_smaller_clusters_when_a_range_is_all_noise(tmp_path: Pa
     config = AnalysisConfig(
         pdb_file=MINI_ENSEMBLE,
         clustering=ClusteringConfig(cluster_residue_ranges=["2-5"], min_cluster_size=5),
-        output=OutputConfig(write_files=False),
     )
     result = FlexGeo2App().run(config)
     # Three models with min_cluster_size 5 cannot form a cluster.
@@ -291,7 +290,6 @@ def test_terminal_summary_hints_at_all_noise_ranges_and_skips_missing_files() ->
     config = AnalysisConfig(
         pdb_file=MINI_ENSEMBLE,
         clustering=ClusteringConfig(cluster_residue_ranges=["2-5"], min_cluster_size=5),
-        output=OutputConfig(write_files=False),
     )
     result = FlexGeo2App().run(config)
     # Add a range that did cluster: it must not get the hint.
