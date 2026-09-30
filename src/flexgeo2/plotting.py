@@ -40,6 +40,48 @@ def cluster_legend_label(label) -> str:
     return "Noise" if int(label) < 0 else f"Cluster {int(label)}"
 
 
+def label_rows(axis, values) -> None:
+    """Label an image axis that has one row (or column) per value, e.g. model IDs.
+
+    Labels go on round values (multiples of 1, 2, 5, 10, 20, 50, ...), as many as fit
+    the axis once the figure is laid out, so they do not overlap however many rows
+    there are. Values need not be contiguous.
+    """
+    from matplotlib.ticker import FuncFormatter, Locator
+
+    values = [int(value) for value in values]
+
+    class RoundValueLocator(Locator):
+        def __call__(self):
+            if not values:
+                return []
+            # Matplotlib's own estimate of how many labels fit (about 2 font sizes apart).
+            room = max(1, self.axis.get_tick_space())
+            step = _round_step(max(values) - min(values), room)
+            ticks = [row for row, value in enumerate(values) if value % step == 0]
+            by_row = list(range(0, len(values), _round_step(len(values) - 1, room)))
+            # Irregular values may have few round ones; then space the labels by row.
+            return ticks if len(ticks) >= len(by_row) / 2 else by_row
+
+    def format_row(position, _) -> str:
+        row = round(position)
+        return str(values[row]) if 0 <= row < len(values) else ""
+
+    axis.set_major_locator(RoundValueLocator())
+    axis.set_major_formatter(FuncFormatter(format_row))
+
+
+def _round_step(span: int, max_ticks: int) -> int:
+    """Smallest step of 1, 2, 5, 10, 20, 50, ... giving at most ``max_ticks`` ticks."""
+    scale = 1
+    while True:
+        for base in (1, 2, 5):
+            step = base * scale
+            if span // step + 1 <= max_ticks:
+                return step
+        scale *= 10
+
+
 class PlotStyle:
     """Global matplotlib styling for FleXgeo2 plots."""
 
@@ -458,9 +500,7 @@ class ClusterMapPlotter(BasePlotter):
             map_axis.set_xlabel("Residue")
             map_axis.set_ylabel("Model")
             self.apply_residue_ticks(map_axis, positions, chain_summary["residue_label"].tolist())
-            model_step = max(1, math.ceil(len(models) / 20))
-            map_axis.set_yticks(range(0, len(models), model_step))
-            map_axis.set_yticklabels([str(model) for model in models[::model_step]])
+            label_rows(map_axis.yaxis, models)
 
         handles = [
             Patch(facecolor=cluster_color(label), label=cluster_legend_label(label))

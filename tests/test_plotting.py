@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from itertools import pairwise
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -16,6 +18,7 @@ from flexgeo2.plotting import (
     OverviewPlotter,
     ResiduePlotter,
     ResidueRangeClusterPlotter,
+    _round_step,
     cluster_color,
     cluster_palette,
 )
@@ -400,6 +403,70 @@ def test_cluster_map_colours_each_cell_by_its_label() -> None:
         ]
     finally:
         plt.close(fig)
+
+
+def drawn_model_labels(summary: pd.DataFrame, assignments: pd.DataFrame) -> list:
+    """The model-axis labels of a laid-out cluster map, bottom to top."""
+    fig = ClusterMapPlotter().render(summary, assignments)
+    try:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        labels = [label for label in fig.axes[1].get_yticklabels() if label.get_text()]
+        return sorted(
+            ((label.get_text(), label.get_window_extent(renderer)) for label in labels),
+            key=lambda item: item[1].y0,
+        )
+    finally:
+        plt.close(fig)
+
+
+@pytest.mark.parametrize("n_models", [3, 10, 16, 20, 50, 500])
+def test_cluster_map_model_labels_do_not_overlap(n_models: int) -> None:
+    summary, assignments = cluster_map_frames({1: [0] * n_models, 2: [1] * n_models})
+
+    labels = drawn_model_labels(summary, assignments)
+
+    texts = sorted(int(text) for text, _ in labels)
+    assert len(texts) >= 2
+    assert set(texts) <= set(range(1, n_models + 1))
+    # Round numbers: every label is a multiple of the same step (1, 2, 5, 10, ...).
+    step = texts[1] - texts[0]
+    assert step in (1, 2, 5, 10, 20, 50, 100)
+    assert all(text % step == 0 for text in texts)
+    for (_, lower), (_, upper) in pairwise(labels):
+        assert lower.y1 <= upper.y0, "model labels overlap"
+
+
+def test_cluster_map_labels_irregular_model_ids() -> None:
+    # PDB MODEL serials need not be contiguous; labels still name the right rows.
+    summary, assignments = cluster_map_frames({1: [0] * 30})
+    model_ids = {model: 7 + 13 * index for index, model in enumerate(range(1, 31))}
+    assignments["model"] = assignments["model"].map(model_ids)
+
+    labels = drawn_model_labels(summary, assignments)
+
+    texts = [int(text) for text, _ in labels]
+    assert len(texts) >= 3
+    assert set(texts) <= set(model_ids.values())
+    for (_, lower), (_, upper) in pairwise(labels):
+        assert lower.y1 <= upper.y0, "model labels overlap"
+
+
+@pytest.mark.parametrize(
+    ("span", "max_ticks", "step"),
+    [
+        (0, 1, 1),
+        (19, 20, 1),
+        (20, 20, 2),
+        (19, 10, 2),
+        (19, 6, 5),
+        (19, 2, 10),
+        (499, 12, 50),
+        (999, 3, 500),
+    ],
+)
+def test_round_step(span: int, max_ticks: int, step: int) -> None:
+    assert _round_step(span, max_ticks) == step
 
 
 def test_cluster_map_marks_missing_residues_and_draws_each_chain() -> None:
