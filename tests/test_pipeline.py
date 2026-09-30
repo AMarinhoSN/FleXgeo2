@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pandas as pd
@@ -15,9 +16,6 @@ class FakeGeometryService:
     def __init__(self, raw_df: pd.DataFrame) -> None:
         self.raw_df = raw_df
         self.calls: list[str] = []
-
-    def ensure_dependencies(self) -> None:
-        self.calls.append("ensure_dependencies")
 
     def parse_structure(self, pdb_file: Path) -> str:
         self.calls.append(f"parse_structure:{Path(pdb_file).name}")
@@ -255,7 +253,6 @@ def test_app_run_with_reference_model_wires_distance_result(
     assert result.distance_result is not None
     assert result.distance_result.reference_label == "input model 1"
     assert geometry.calls == [
-        "ensure_dependencies",
         "parse_structure:ensemble.pdb",
         "describe_structure:ensemble.pdb",
         "compute_geometry:ensemble.pdb:2",
@@ -306,7 +303,6 @@ def test_app_run_with_reference_pdb_loads_and_filters_reference(
     result = app.run(config)
 
     assert geometry.calls == [
-        "ensure_dependencies",
         "parse_structure:ensemble.pdb",
         "parse_structure:reference.pdb",
         "describe_structure:ensemble.pdb",
@@ -435,3 +431,15 @@ def test_app_run_validates_reference_pdb_model_before_computing_geometry(
         app.run(config)
 
     assert not any(call.startswith("compute_geometry") for call in geometry.calls)
+
+
+def test_missing_melodia_raises_module_not_found_error(
+    monkeypatch: pytest.MonkeyPatch, mini_ensemble_pdb: Path
+) -> None:
+    # A library must not exit the interpreter; the caller sees the usual import error.
+    monkeypatch.setitem(sys.modules, "melodia_py", None)
+
+    with pytest.raises(ModuleNotFoundError) as excinfo:
+        FlexGeo2App().run(AnalysisConfig(pdb_file=mini_ensemble_pdb))
+
+    assert excinfo.value.name == "melodia_py"

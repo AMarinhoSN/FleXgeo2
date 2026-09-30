@@ -258,6 +258,13 @@ def main(argv: list[str] | None = None) -> int:
     except (FileNotFoundError, ValueError) as exc:
         print(f"{parser.prog}: error: {exc}", file=sys.stderr)
         return 1
+    except ModuleNotFoundError as exc:
+        print(
+            f"{parser.prog}: error: missing dependency '{exc.name}'. Reinstall FleXgeo2 "
+            "with its dependencies, for example with: pip install -e .",
+            file=sys.stderr,
+        )
+        return 1
     except KeyboardInterrupt:
         print(f"{parser.prog}: interrupted", file=sys.stderr)
         return 130

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -139,6 +140,21 @@ def test_main_reports_missing_input_without_traceback(tmp_path: Path, capsys) ->
     assert exit_code == 1
     assert captured.err.startswith("flexgeo2: error: Input PDB file not found")
     assert "Traceback" not in captured.err
+
+
+def test_main_reports_missing_dependency_without_traceback(
+    monkeypatch: pytest.MonkeyPatch, mini_ensemble_pdb: Path, tmp_path: Path, capsys
+) -> None:
+    monkeypatch.setitem(sys.modules, "melodia_py", None)
+
+    exit_code = main([str(mini_ensemble_pdb), "--output-dir", str(tmp_path / "out")])
+
+    assert exit_code == 1
+    assert capsys.readouterr().err == (
+        "flexgeo2: error: missing dependency 'melodia_py'. Reinstall FleXgeo2 with its "
+        "dependencies, for example with: pip install -e .\n"
+    )
+    assert not (tmp_path / "out").exists()
 
 
 @pytest.mark.parametrize(

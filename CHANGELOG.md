@@ -73,6 +73,10 @@ model numbers, so results and scripts written for it need updating: see
     `run_manifest`, `cluster_map_plot`, `residue_plots_dir` and `per_chain_plots` are
     new. With more than 4 chains, `overview_plot`, `distance_heatmap` and
     `cluster_map_plot` are `None` and `per_chain_plots` lists the per-chain figures.
+  - `GeometryService.ensure_dependencies()` is removed. It ended the Python session
+    with `SystemExit` when a dependency was missing; a missing dependency now raises
+    the usual `ModuleNotFoundError`, and the CLI reports it in one line. A custom
+    geometry service passed to `FlexGeo2App` no longer needs this method.
   - `OutputWriter` no longer takes `chain_plotter` or `residue_cluster_plotter`, and
     takes new `cluster_map_plotter` and `residue_plotter` arguments.
     `ResidueClusterPlotter` is replaced by `ResiduePlotter`.

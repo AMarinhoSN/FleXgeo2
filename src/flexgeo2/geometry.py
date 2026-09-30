@@ -33,20 +33,6 @@ class GeometryService:
     required_columns = {"model", "chain", "order", "name", "curvature", "torsion"}
 
     @staticmethod
-    def ensure_dependencies() -> None:
-        try:
-            import matplotlib  # noqa: F401
-            import melodia_py  # noqa: F401
-            import numpy  # noqa: F401
-            import pandas  # noqa: F401
-        except ModuleNotFoundError as exc:
-            missing = exc.name or "required dependency"
-            raise SystemExit(
-                f"Missing dependency: {missing}. Install the project dependencies first, "
-                "for example with: pip install -e ."
-            ) from exc
-
-    @staticmethod
     def parse_structure(pdb_file: str | Path):
         """Parse a PDB file with Biopython, without computing any geometry."""
         from Bio.PDB import PDBParser

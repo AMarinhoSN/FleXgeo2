@@ -33,7 +33,6 @@ class FlexGeo2App:
         self.output_writer_cls = output_writer_cls
 
     def run(self, config: AnalysisConfig) -> AnalysisResult:
-        self.geometry.ensure_dependencies()
         PlotStyle.apply()
 
         validate_config(config)
