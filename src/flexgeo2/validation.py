@@ -39,7 +39,7 @@ def validate_config(config: AnalysisConfig) -> None:
 
     clustering = config.clustering
     if clustering.cluster_residues or clustering.cluster_residue_ranges:
-        if clustering.min_cluster_size < 2:
+        if clustering.min_cluster_size is not None and clustering.min_cluster_size < 2:
             raise ValueError("min_cluster_size must be at least 2.")
         if clustering.min_samples is not None and clustering.min_samples < 1:
             raise ValueError("min_samples must be a positive integer.")

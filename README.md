@@ -76,9 +76,10 @@ raw_df = geometry.normalize(raw_df)
 summary_df = geometry.summarize(raw_df)
 
 clusters = ClusteringService()
+# None: the defaults (smallest cluster 5% of the models, at least 5; min_samples 5)
 assignments_df, cluster_summary_df = clusters.cluster_residues(
     raw_df,
-    min_cluster_size=5,
+    min_cluster_size=None,
     min_samples=None,
 )
 ```

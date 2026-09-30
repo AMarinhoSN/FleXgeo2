@@ -4,6 +4,30 @@ from __future__ import annotations
 # other descriptors are in geometry/descriptors.csv.
 ASSIGNMENT_COLUMNS = ["chain", "model", "order", "name", "residue_label", "curvature", "torsion"]
 
+# HDBSCAN defaults, chosen on synthetic ensembles with known states (20-1000 models, 5 and
+# 10 degree dihedral noise) and checked on 2LJ5:
+# - A residue or range may form a single cluster. Without that, HDBSCAN must split every
+#   residue into two or more clusters or label it all noise: 2LJ5 had all 76 residues
+#   split, up to 12 clusters each, and single-state residues were never one cluster.
+# - The smallest cluster is 5% of the models, at least 5. A fixed 5 splits single-state
+#   residues more often as the ensemble grows (3-8% of them at 300-1000 models).
+# - min_samples is 5. HDBSCAN's default (= min_cluster_size) smooths so much at 1000
+#   models that clear two-state ranges merge; 1 or 2 split single-state residues.
+MIN_CLUSTER_FRACTION = 0.05
+MIN_CLUSTER_SIZE_FLOOR = 5
+DEFAULT_MIN_SAMPLES = 5
+
+
+def clustering_parameters(
+    min_cluster_size: int | None, min_samples: int | None, n_models: int
+) -> tuple[int, int]:
+    """HDBSCAN ``(min_cluster_size, min_samples)`` for ``n_models``, filling in defaults."""
+    if min_cluster_size is None:
+        min_cluster_size = max(MIN_CLUSTER_SIZE_FLOOR, round(MIN_CLUSTER_FRACTION * n_models))
+    if min_samples is None:
+        min_samples = min(DEFAULT_MIN_SAMPLES, min_cluster_size)
+    return min_cluster_size, min_samples
+
 
 class ClusteringService:
     """HDBSCAN clustering helpers for residues and residue ranges."""
@@ -52,11 +76,14 @@ class ClusteringService:
             raise ValueError("PCA projection produced non-finite coordinates.")
         return projection
 
-    def cluster_residues(self, raw_df, min_cluster_size: int, min_samples: int | None):
+    def cluster_residues(self, raw_df, min_cluster_size: int | None, min_samples: int | None):
         import hdbscan
         import numpy as np
         import pandas as pd
 
+        min_cluster_size, min_samples = clustering_parameters(
+            min_cluster_size, min_samples, raw_df["model"].nunique()
+        )
         cluster_frames = []
         summary_rows = []
 
@@ -85,6 +112,7 @@ class ClusteringService:
             clusterer = hdbscan.HDBSCAN(
                 min_cluster_size=min_cluster_size,
                 min_samples=min_samples,
+                allow_single_cluster=True,
             )
             feature_matrix = np.array(residue_points.to_numpy(), dtype=float, order="C", copy=True)
             labels = clusterer.fit_predict(feature_matrix)
@@ -123,13 +151,16 @@ class ClusteringService:
         self,
         raw_df,
         range_texts: list[str],
-        min_cluster_size: int,
+        min_cluster_size: int | None,
         min_samples: int | None,
     ):
         import hdbscan
         import numpy as np
         import pandas as pd
 
+        min_cluster_size, min_samples = clustering_parameters(
+            min_cluster_size, min_samples, raw_df["model"].nunique()
+        )
         assignment_frames = []
         summary_rows = []
         parsed_ranges = [self.parse_residue_range(range_text) for range_text in range_texts]
@@ -177,6 +208,7 @@ class ClusteringService:
                     clusterer = hdbscan.HDBSCAN(
                         min_cluster_size=min_cluster_size,
                         min_samples=min_samples,
+                        allow_single_cluster=True,
                     )
                     labels = clusterer.fit_predict(feature_matrix)
                     probabilities = getattr(clusterer, "probabilities_", [0.0] * len(feature_table))

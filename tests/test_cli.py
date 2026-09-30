@@ -71,6 +71,14 @@ def test_build_config_maps_cli_flags() -> None:
     assert config.clustering.min_samples == 2
 
 
+def test_clustering_sizes_default_to_the_library_defaults() -> None:
+    # None lets ClusteringService scale the minimum cluster size with the ensemble.
+    config = build_config(build_parser().parse_args(["ensemble.pdb", "--cluster-residues"]))
+
+    assert config.clustering.min_cluster_size is None
+    assert config.clustering.min_samples is None
+
+
 @pytest.mark.parametrize("value", ["-0.1", "1", "nan"])
 def test_parser_rejects_invalid_dmax_outlier_fraction(value: str) -> None:
     parser = build_parser()

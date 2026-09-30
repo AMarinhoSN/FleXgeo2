@@ -28,7 +28,9 @@ class ClusteringConfig:
 
     cluster_residues: bool = False
     cluster_residue_ranges: list[str] = field(default_factory=list)
-    min_cluster_size: int = 5
+    # None: 5% of the models, at least 5. See flexgeo2.clustering for how these were chosen.
+    min_cluster_size: int | None = None
+    # None: 5, or min_cluster_size if smaller.
     min_samples: int | None = None
 
 

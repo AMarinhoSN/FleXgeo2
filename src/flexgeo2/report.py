@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
 
+from flexgeo2.clustering import clustering_parameters
 from flexgeo2.config import MAX_CHAINS_PER_FIGURE, PLOT_FORMATS
 from flexgeo2.models import AnalysisResult
 
@@ -208,7 +209,9 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
             **_RESIDUE,
             "models": "Number of models clustered.",
             "n_clusters": "Number of clusters found (noise excluded).",
-            "noise_fraction": "Fraction of models labelled as noise.",
+            "noise_fraction": "Fraction of models labelled as noise: outside the dense core "
+            "of every cluster; often around half the models, even for a residue with one "
+            "broad state.",
         },
     ),
     OutputFile("clusters/clusters.{ext}", "clusters/clusters.{ext}", _CLUSTER_MAP),
@@ -238,7 +241,8 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
             "residues": "Number of residues in the range.",
             "models": "Number of models clustered.",
             "n_clusters": "Number of clusters found (noise excluded).",
-            "noise_fraction": "Fraction of models labelled as noise.",
+            "noise_fraction": "Fraction of models labelled as noise: outside the dense core "
+            "of every cluster.",
         },
     ),
     OutputFile(
@@ -347,6 +351,8 @@ def build_manifest(result: AnalysisResult, output_dir: Path, created: datetime) 
         },
         "reference": reference,
         "parameters": _jsonable(dataclasses.asdict(config)) if config is not None else None,
+        # The HDBSCAN settings actually used, with defaults filled in.
+        "hdbscan": _hdbscan_settings(result),
         "environment": {
             "python": sys.version.split()[0],
             "platform": platform.platform(),
@@ -398,6 +404,18 @@ ALL_NOISE_HINT = (
 )
 
 
+def _hdbscan_settings(result: AnalysisResult) -> dict | None:
+    """HDBSCAN settings used for clustering, or None when no clustering ran."""
+    clustering = result.config.clustering if result.config is not None else None
+    ran = result.residue_clustering is not None or result.residue_range_clustering is not None
+    if clustering is None or not ran:
+        return None
+    size, samples = clustering_parameters(
+        clustering.min_cluster_size, clustering.min_samples, result.raw_df["model"].nunique()
+    )
+    return {"min_cluster_size": size, "min_samples": samples, "allow_single_cluster": True}
+
+
 def _analyses(result: AnalysisResult) -> list[str]:
     config = result.config
     lines = []
@@ -408,11 +426,11 @@ def _analyses(result: AnalysisResult) -> list[str]:
     )
     if result.distance_result is not None:
         lines.append(f"- Distance to reference: {result.distance_result.reference_label}.")
-    clustering = config.clustering if config is not None else None
+    settings = _hdbscan_settings(result)
     hdbscan = (
-        f" (HDBSCAN, min_cluster_size {clustering.min_cluster_size}, "
-        f"min_samples {clustering.min_samples if clustering.min_samples else 'default'})"
-        if clustering is not None
+        f" (HDBSCAN, min_cluster_size {settings['min_cluster_size']}, "
+        f"min_samples {settings['min_samples']}, single cluster allowed)"
+        if settings is not None
         else ""
     )
     if result.residue_clustering is not None:
@@ -566,10 +584,11 @@ def render_terminal_summary(result: AnalysisResult, top: int = 3) -> str:
     if result.residue_range_clustering is not None:
         for _, row in result.residue_range_clustering.summary_df.iterrows():
             chain = f"{row['chain']} " if row["chain"] else ""
-            hint = " (try a smaller --cluster-min-size)" if row["n_clusters"] == 0 else ""
+            n_clusters = int(row["n_clusters"])
+            hint = " (try a smaller --cluster-min-size)" if n_clusters == 0 else ""
             lines.append(
-                f"Range clustering {chain}{row['range_label']}: {int(row['n_clusters'])} "
-                f"clusters, {row['noise_fraction']:.0%} noise{hint}"
+                f"Range clustering {chain}{row['range_label']}: {n_clusters} "
+                f"cluster{'' if n_clusters == 1 else 's'}, {row['noise_fraction']:.0%} noise{hint}"
             )
 
     plots_dir = result.outputs.residue_plots_dir if result.outputs is not None else None

@@ -18,6 +18,19 @@ model numbers, so results and scripts written for it need updating: see
 
 ### Breaking changes
 
+- **New HDBSCAN defaults for per-residue and range clustering**, so the same command
+  gives different clusters:
+  - a residue or range may form a single cluster (`allow_single_cluster`); before, a
+    residue with one state was split into clusters or labelled all noise;
+  - `--cluster-min-size` defaults to 5% of the models, at least 5 (was 5), so it is
+    unchanged up to 100 models;
+  - `--cluster-min-samples` defaults to 5, or the minimum cluster size if smaller (was
+    equal to the minimum cluster size).
+
+  On `pdb2lj5.pdb` (301 models) the earlier defaults split all 76 residues, up to 12
+  clusters each; the new ones split 2. `ClusteringConfig.min_cluster_size` defaults to
+  `None` (was `5`), and the settings used are in the output `README.md` and in
+  `run.json` under `hdbscan`.
 - **Model numbers now match the PDB file.** The preview used Biopython's 0-based model index,
   so every `model` value was one lower than the PDB `MODEL` record and
   `--reference-model 1` selected `MODEL 2`. Model IDs are now the `MODEL` serial numbers;

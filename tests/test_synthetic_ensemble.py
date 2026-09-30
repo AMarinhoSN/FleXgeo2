@@ -204,8 +204,8 @@ def test_descriptors_far_from_the_switch_are_state_independent(analysed) -> None
 
 
 # Range clustering, measured over 50 noise seeds for both fixtures: every window that
-# contains the switch (up to the whole chain) recovered all states exactly, and every
-# window away from it came out as pure noise.
+# contains the switch (up to the whole chain) recovered all states exactly. Windows away
+# from it were pure noise until single clusters were allowed; they are now one cluster.
 
 
 def range_assignments(result, window: str):
@@ -234,13 +234,21 @@ def test_range_clustering_recovers_every_state_for_windows_covering_the_switch(
         assert len({labels[0] for labels in labels_by_state}) == n_states, window
 
 
-def test_range_clustering_finds_no_states_far_from_the_switch(analysed) -> None:
+def test_range_clustering_finds_one_state_far_from_the_switch(analysed) -> None:
     ensemble, result = analysed
     summary = result.residue_range_clustering.summary_df.set_index("range_label")
 
+    # One state. HDBSCAN keeps only its dense core and labels the rest noise (65-90% here).
     for window in ensemble.far_windows:
-        assert summary.loc[window, "n_clusters"] == 0, window
-        assert summary.loc[window, "noise_fraction"] == 1.0, window
+        assert summary.loc[window, "n_clusters"] == 1, window
+
+
+def test_single_state_residues_form_one_cluster(analysed) -> None:
+    ensemble, result = analysed
+    summary = result.residue_clustering.summary_df.set_index("order")
+
+    distant = summary.loc[list(ensemble.distant_residues), "n_clusters"]
+    assert (distant == 1).all(), distant[distant != 1].to_dict()
 
 
 def test_range_pca_coordinates_are_finite(analysed) -> None:

@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from flexgeo2.clustering import ClusteringService
+from flexgeo2.clustering import ClusteringService, clustering_parameters
 
 
 def test_parse_residue_range_accepts_start_and_end() -> None:
@@ -244,7 +244,7 @@ def test_cluster_residues_passes_hdbscan_parameters(monkeypatch: pytest.MonkeyPa
 
     ClusteringService().cluster_residues(raw_df=raw_df, min_cluster_size=7, min_samples=3)
 
-    assert created == [{"min_cluster_size": 7, "min_samples": 3}]
+    assert created == [{"min_cluster_size": 7, "min_samples": 3, "allow_single_cluster": True}]
 
 
 @pytest.mark.parametrize(
@@ -353,3 +353,48 @@ def test_cluster_residue_ranges_clusters_each_window_independently() -> None:
     )
 
     assert summary_df.set_index("range_label")["n_clusters"].to_dict() == {"1-2": 3, "3-4": 2}
+
+
+@pytest.mark.parametrize(
+    ("min_cluster_size", "min_samples", "n_models", "expected"),
+    [
+        (None, None, 20, (5, 5)),
+        (None, None, 100, (5, 5)),
+        (None, None, 301, (15, 5)),
+        (None, None, 1000, (50, 5)),
+        (8, None, 1000, (8, 5)),
+        (3, None, 1000, (3, 3)),
+        (None, 2, 1000, (50, 2)),
+        (20, 12, 30, (20, 12)),
+    ],
+)
+def test_clustering_parameters_fill_in_the_defaults(
+    min_cluster_size, min_samples, n_models: int, expected: tuple[int, int]
+) -> None:
+    # Smallest cluster 5% of the models (at least 5); min_samples 5 (or the size if smaller).
+    assert clustering_parameters(min_cluster_size, min_samples, n_models) == expected
+
+
+def test_default_parameters_scale_with_the_number_of_models(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import hdbscan
+
+    created = []
+    real_hdbscan = hdbscan.HDBSCAN
+
+    def recording_hdbscan(**kwargs):
+        created.append(kwargs)
+        return real_hdbscan(**kwargs)
+
+    monkeypatch.setattr(hdbscan, "HDBSCAN", recording_hdbscan)
+    raw_df, _ = _blob_frame({1: [(0.2, -0.5)], 2: [(0.4, 0.1)]}, points_per_blob=200)
+    service = ClusteringService()
+
+    service.cluster_residues(raw_df=raw_df, min_cluster_size=None, min_samples=None)
+    service.cluster_residue_ranges(
+        raw_df=raw_df, range_texts=["1-2"], min_cluster_size=None, min_samples=None
+    )
+
+    expected = {"min_cluster_size": 10, "min_samples": 5, "allow_single_cluster": True}
+    assert created == [expected] * 3  # two residues, one range

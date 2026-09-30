@@ -133,14 +133,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--cluster-min-size",
         type=int_at_least(2),
-        default=5,
-        help="Minimum cluster size passed to HDBSCAN. Default: 5",
+        default=None,
+        help="Smallest cluster HDBSCAN reports, in models. Default: 5%% of the models, at least 5.",
     )
     parser.add_argument(
         "--cluster-min-samples",
         type=int_at_least(1),
         default=None,
-        help="Optional min_samples value passed to HDBSCAN.",
+        help="HDBSCAN min_samples: larger values label more models as noise. Default: 5, "
+        "or --cluster-min-size if smaller.",
     )
     parser.add_argument(
         "--cluster-residue-range",

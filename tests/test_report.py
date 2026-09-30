@@ -151,6 +151,20 @@ def test_readme_skips_outputs_of_analyses_that_did_not_run(tmp_path: Path) -> No
     for absent in ("reference/", "clusters/", "range_clusters/", "models_by_chain"):
         assert absent not in readme, absent
     assert "Distance to reference" not in readme
+    assert json.loads((output_dir / "run.json").read_text())["hdbscan"] is None
+
+
+def test_readme_gives_the_hdbscan_settings_used(tmp_path: Path) -> None:
+    output_dir = tmp_path / "out"
+    assert main([str(MINI_ENSEMBLE), "--output-dir", str(output_dir), "--cluster-residues"]) == 0
+
+    readme = (output_dir / "README.md").read_text()
+
+    # Three models: the default size is the floor of 5 and min_samples the default 5.
+    assert (
+        "Per-residue clustering (HDBSCAN, min_cluster_size 5, min_samples 5, "
+        "single cluster allowed)." in readme
+    )
 
 
 def test_manifest_records_inputs_parameters_and_versions(
@@ -176,6 +190,12 @@ def test_manifest_records_inputs_parameters_and_versions(
         "cluster_residue_ranges": ["2-5"],
         "min_cluster_size": 2,
         "min_samples": None,
+    }
+    # min_samples was not given: it defaults to 5, or min_cluster_size if smaller.
+    assert manifest["hdbscan"] == {
+        "min_cluster_size": 2,
+        "min_samples": 2,
+        "allow_single_cluster": True,
     }
     assert parameters["reference"]["pdb_model_id"] == "2"
     assert parameters["output"]["distance_matrices"] is True
@@ -240,7 +260,8 @@ def test_terminal_summary_gives_headline_results_not_file_paths(capsys) -> None:
         f"Most flexible residues (dmax): {top_residues(residues, 'dmax')}",
         f"Furthest from input model 1 (mean distance): {top_residues(distances, 'distance_mean')}",
         f"Per-residue clustering: {n_split} of 10 residues split into two or more clusters",
-        f"Range clustering A 2-5: {range_row['n_clusters']} clusters, "
+        f"Range clustering A 2-5: {range_row['n_clusters']} "
+        f"cluster{'' if range_row['n_clusters'] == 1 else 's'}, "
         f"{range_row['noise_fraction']:.0%} noise{hint}",
         "",
         f"Results: out/ ({len(files_on_disk(out))} files); start with README.md",
@@ -276,7 +297,8 @@ def test_terminal_summary_hints_at_all_noise_ranges_and_skips_missing_files() ->
     # Add a range that did cluster: it must not get the hint.
     ranges = result.residue_range_clustering.summary_df
     clustered = ranges.assign(range_label="6-9", n_clusters=2, noise_fraction=0.25)
-    result.residue_range_clustering.summary_df = pd.concat([ranges, clustered])
+    single = ranges.assign(range_label="7-10", n_clusters=1, noise_fraction=0.4)
+    result.residue_range_clustering.summary_df = pd.concat([ranges, clustered, single])
 
     lines = render_terminal_summary(result).splitlines()
 
@@ -284,6 +306,7 @@ def test_terminal_summary_hints_at_all_noise_ranges_and_skips_missing_files() ->
         lines
     )
     assert "Range clustering A 6-9: 2 clusters, 25% noise" in lines
+    assert "Range clustering A 7-10: 1 cluster, 40% noise" in lines
     assert not any(line.startswith("Results:") for line in lines)
 
 
