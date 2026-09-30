@@ -34,6 +34,27 @@ def test_normalize_adds_residue_labels_and_sorts(raw_geometry_df: pd.DataFrame) 
     assert str(result["order"].dtype) == "int64"
 
 
+def test_normalize_drops_melodia_bookkeeping_and_leads_with_row_keys(
+    raw_geometry_df: pd.DataFrame,
+) -> None:
+    melodia_like = raw_geometry_df.assign(id=range(len(raw_geometry_df)), code="PDB2LJ5")
+    melodia_like = melodia_like[
+        ["id", "model", "code", "chain", "order", "name", "curvature", "torsion"]
+    ]
+
+    result = GeometryService().normalize(melodia_like)
+
+    assert result.columns.tolist() == [
+        "chain",
+        "model",
+        "order",
+        "name",
+        "residue_label",
+        "curvature",
+        "torsion",
+    ]
+
+
 def test_summarize_groups_residues(normalized_geometry_df: pd.DataFrame) -> None:
     result = GeometryService().summarize(normalized_geometry_df)
 

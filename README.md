@@ -220,7 +220,7 @@ first, and any other files in the folder are kept.
 - Model identifiers are the PDB `MODEL` serial numbers (1-based), so `--reference-model 1` selects `MODEL 1`. Files without `MODEL` records are reported as model `1`.
 - Residue positions are plotted using Melodia's `order` column, which is the author residue number from the PDB file.
 - Chains, reference models and residue ranges are validated before Melodia runs, so input mistakes fail fast with a one-line error.
-- `geometry/residues.csv` includes `dmax` plus the trimmed extrema used to compute it: `curvature_dmax_min`, `curvature_dmax_max`, `torsion_dmax_min`, and `torsion_dmax_max`.
+- `geometry/residues.csv` includes `dmax`. The trimmed extrema used to compute it (`curvature_dmax_min`, `curvature_dmax_max`, `torsion_dmax_min`, `torsion_dmax_max`) and the histogram bin widths are in `AnalysisResult.residue_summary_df` when using FleXgeo2 from Python (see notebook 06).
 - `dmax` trims only sparse extreme histogram bins. The default threshold is `0.01`, meaning only extreme bins with less than 1% of a residue's observations are ignored.
 - The per-chain model summary includes mean absolute deviation from the ensemble mean, which is useful as a first-pass conformational variability signal.
 - Distance matrices use rows for ensemble models and columns for residues, with each cell storing the Euclidean distance to the chosen reference in `(curvature, torsion)` space.

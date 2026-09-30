@@ -120,7 +120,7 @@ def test_cli_runs_both_clustering_modes(mini_ensemble_pdb: Path, tmp_path: Path)
     assert exit_code == 0
     residue_summary = pd.read_csv(output_dir / "clusters" / "residues.csv")
     assert residue_summary["order"].tolist() == list(range(1, 11))
-    assert set(residue_summary["n_conformations"]) == {3}
+    assert set(residue_summary["models"]) == {3}
     assert residue_summary["noise_fraction"].between(0.0, 1.0).all()
     assert (output_dir / "clusters" / "clusters.png").is_file()
 
@@ -128,12 +128,29 @@ def test_cli_runs_both_clustering_modes(mini_ensemble_pdb: Path, tmp_path: Path)
     assignments = pd.read_csv(output_dir / "clusters" / "assignments.csv")
     assert len(assignments) == 3 * 10
     assert set(assignments["model"]) == {1, 2, 3}
-    assert {"chain", "order", "cluster", "cluster_probability"} <= set(assignments.columns)
+    keys = ["chain", "model", "order", "name", "residue_label"]
+    assert assignments.columns.tolist() == [
+        *keys,
+        "curvature",
+        "torsion",
+        "cluster",
+        "cluster_probability",
+    ]
+    descriptors = pd.read_csv(output_dir / "geometry" / "descriptors.csv", nrows=0)
+    assert descriptors.columns.tolist() == [
+        *keys,
+        "curvature",
+        "torsion",
+        "arc_length",
+        "writhing",
+        "phi",
+        "psi",
+    ]
 
     range_summary = pd.read_csv(output_dir / "range_clusters" / "ranges.csv")
-    assert range_summary[["chain", "range_label", "n_residues", "n_conformations"]].to_dict(
-        "records"
-    ) == [{"chain": "A", "range_label": "2-5", "n_residues": 4, "n_conformations": 3}]
+    assert range_summary[["chain", "range_label", "residues", "models"]].to_dict("records") == [
+        {"chain": "A", "range_label": "2-5", "residues": 4, "models": 3}
+    ]
     assert (output_dir / "range_clusters" / "A_2-5.png").is_file()
 
     range_assignments = pd.read_csv(output_dir / "range_clusters" / "assignments.csv")

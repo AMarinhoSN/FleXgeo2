@@ -4,6 +4,7 @@ from pathlib import Path
 
 from flexgeo2.config import OutputConfig
 from flexgeo2.distances import DistanceService
+from flexgeo2.geometry import DMAX_DETAIL_COLUMNS
 from flexgeo2.models import AnalysisResult, OutputArtifacts
 from flexgeo2.plotting import (
     ClusterMapPlotter,
@@ -147,7 +148,14 @@ class OutputWriter:
         )
 
         result.raw_df.to_csv(artifacts.raw_csv, index=False)
-        result.residue_summary_df.to_csv(artifacts.residue_summary_csv, index=False)
+        residue_columns = [
+            column
+            for column in result.residue_summary_df.columns
+            if column not in DMAX_DETAIL_COLUMNS
+        ]
+        result.residue_summary_df[residue_columns].to_csv(
+            artifacts.residue_summary_csv, index=False
+        )
         result.overall_model_summary_df.to_csv(artifacts.overall_model_summary_csv, index=False)
         self.overview_plotter.plot(
             result.residue_summary_df,

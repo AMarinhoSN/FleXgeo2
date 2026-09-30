@@ -4,6 +4,20 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
+# Columns that identify a row of per-model, per-residue tables, in output order.
+DESCRIPTOR_KEYS = ("chain", "model", "order", "name", "residue_label")
+
+# residue_summary_df columns that explain how dmax was computed; kept for the library,
+# left out of geometry/residues.csv.
+DMAX_DETAIL_COLUMNS = (
+    "curvature_dmax_min",
+    "curvature_dmax_max",
+    "torsion_dmax_min",
+    "torsion_dmax_max",
+    "curvature_dmax_bin_width",
+    "torsion_dmax_bin_width",
+)
+
 
 @dataclass(slots=True)
 class StructureInfo:
@@ -96,12 +110,15 @@ class GeometryService:
         return filtered
 
     def normalize(self, df):
-        normalised = df.copy()
+        # Melodia's row index ("id") and file-name code ("code") carry no information.
+        normalised = df.drop(columns=["id", "code"], errors="ignore")
         normalised["order"] = normalised["order"].astype(int)
         normalised["residue_label"] = [
             f"{name}{int(order)}"
             for order, name in zip(normalised["order"], normalised["name"], strict=False)
         ]
+        keys = [column for column in DESCRIPTOR_KEYS if column in normalised.columns]
+        normalised = normalised[keys + [c for c in normalised.columns if c not in keys]]
         return normalised.sort_values(["chain", "model", "order"]).reset_index(drop=True)
 
     @staticmethod

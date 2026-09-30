@@ -163,7 +163,7 @@ def _blob_frame(
                 }
             )
     expected_groups = {
-        str(model_index + 1): model_index // points_per_blob for model_index in range(n_models)
+        model_index + 1: model_index // points_per_blob for model_index in range(n_models)
     }
     return pd.DataFrame(rows), expected_groups
 
@@ -195,7 +195,7 @@ def test_cluster_residues_recovers_separated_blobs_with_hdbscan() -> None:
     assert summary.loc[1, "n_clusters"] == 2
     assert summary.loc[2, "n_clusters"] == 3
     assert summary["noise_fraction"].tolist() == [0.0, 0.0]
-    assert summary["n_conformations"].tolist() == [60, 60]
+    assert summary["models"].tolist() == [60, 60]
 
     assert len(assignments_df) == len(raw_df)
     for order, n_blobs in ((1, 2), (2, 3)):
@@ -206,6 +206,27 @@ def test_cluster_residues_recovers_separated_blobs_with_hdbscan() -> None:
     probabilities = assignments_df["cluster_probability"]
     assert probabilities.between(0.0, 1.0).all()
     assert (probabilities > 0.0).all()
+
+
+def test_cluster_residues_keeps_only_row_keys_features_and_labels() -> None:
+    raw_df, _ = _blob_frame({1: [(0.2, -0.5), (0.8, 0.5)]})
+    raw_df = raw_df.assign(arc_length=3.8, writhing=0.0, phi=-60.0, psi=-45.0)
+
+    for min_cluster_size in (5, 1000):  # clustered, and too few models to cluster
+        assignments_df, _ = ClusteringService().cluster_residues(
+            raw_df=raw_df, min_cluster_size=min_cluster_size, min_samples=None
+        )
+        assert assignments_df.columns.tolist() == [
+            "chain",
+            "model",
+            "order",
+            "name",
+            "residue_label",
+            "curvature",
+            "torsion",
+            "cluster",
+            "cluster_probability",
+        ]
 
 
 def test_cluster_residues_passes_hdbscan_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -247,7 +268,7 @@ def test_cluster_residues_uses_curvature_and_torsion(centers: dict) -> None:
 
     assert summary_df.iloc[0]["n_clusters"] == 2
     _assert_labels_match_groups(
-        assignments_df["cluster"], assignments_df["model"].astype(str).map(expected_groups)
+        assignments_df["cluster"], assignments_df["model"].map(expected_groups)
     )
 
 
@@ -270,10 +291,11 @@ def test_cluster_residue_ranges_recovers_window_signatures_with_hdbscan() -> Non
         min_samples=None,
     )
 
+    assert pd.api.types.is_integer_dtype(assignments_df["model"])
     summary = summary_df.iloc[0]
     assert summary["range_label"] == "10-12"
-    assert summary["n_residues"] == 3
-    assert summary["n_conformations"] == 30
+    assert summary["residues"] == 3
+    assert summary["models"] == 30
     assert summary["n_clusters"] == 2
     assert summary["noise_fraction"] == 0.0
 

@@ -8,7 +8,7 @@ import pytest
 
 from flexgeo2.config import OutputConfig
 from flexgeo2.distances import DistanceService
-from flexgeo2.geometry import GeometryService
+from flexgeo2.geometry import DMAX_DETAIL_COLUMNS, GeometryService
 from flexgeo2.models import (
     AnalysisResult,
     DistanceResult,
@@ -90,7 +90,7 @@ def full_result(base_result: AnalysisResult) -> AnalysisResult:
     residue_summary = (
         raw_df.groupby(["chain", "order", "name", "residue_label"])
         .size()
-        .reset_index(name="n_conformations")
+        .reset_index(name="models")
         .assign(n_clusters=1, noise_fraction=0.0)
     )
     base_result.residue_clustering = ResidueClusteringResult(
@@ -104,7 +104,7 @@ def full_result(base_result: AnalysisResult) -> AnalysisResult:
             "range_start": 1,
             "range_end": 2,
             "range_label": "1-2",
-            "model": ["1", "2"],
+            "model": [1, 2],
             "cluster": [0, 0],
             "cluster_probability": [1.0, 1.0],
             "pc1": [-0.5, 0.5],
@@ -118,8 +118,8 @@ def full_result(base_result: AnalysisResult) -> AnalysisResult:
                 "range_start": 1,
                 "range_end": 2,
                 "range_label": "1-2",
-                "n_conformations": 2,
-                "n_residues": 2,
+                "residues": 2,
+                "models": 2,
                 "n_clusters": 1,
                 "noise_fraction": 0.0,
             }
@@ -258,7 +258,9 @@ def test_csv_outputs_round_trip(
 
     expected_tables = {
         artifacts.raw_csv: full_result.raw_df,
-        artifacts.residue_summary_csv: full_result.residue_summary_df,
+        artifacts.residue_summary_csv: full_result.residue_summary_df.drop(
+            columns=list(DMAX_DETAIL_COLUMNS)
+        ),
         artifacts.model_summary_csv: full_result.model_summary_df,
         artifacts.overall_model_summary_csv: full_result.overall_model_summary_df,
         artifacts.distance_long_csv: full_result.distance_result.long_df,
@@ -272,12 +274,28 @@ def test_csv_outputs_round_trip(
     }
     for path, expected in expected_tables.items():
         written = pd.read_csv(path, dtype={"model": str, "chain": str})
+        if "model" in expected.columns:
+            expected = expected.astype({"model": str})
         pd.testing.assert_frame_equal(
             written,
             expected.reset_index(drop=True),
             check_dtype=False,
             obj=path.name,
         )
+
+
+def test_residue_table_leaves_out_dmax_details(
+    tmp_path: Path, plotters: dict, base_result: AnalysisResult
+) -> None:
+    artifacts = make_writer(tmp_path, plotters).write(
+        base_result, max_models_in_plot=12, hide_model_traces=False
+    )
+
+    columns = pd.read_csv(artifacts.residue_summary_csv, nrows=0).columns.tolist()
+    assert "dmax" in columns
+    assert not set(DMAX_DETAIL_COLUMNS) & set(columns)
+    # The library result keeps them, e.g. to draw the trimmed ranges.
+    assert set(DMAX_DETAIL_COLUMNS) <= set(base_result.residue_summary_df.columns)
 
 
 def test_distance_matrices_are_split_by_chain(

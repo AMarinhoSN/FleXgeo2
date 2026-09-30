@@ -22,13 +22,22 @@ _RESIDUE = {
     "name": "Residue name.",
     "residue_label": "Residue name and number, e.g. ALA45.",
 }
-_DESCRIPTORS = {
-    "id": "Row index assigned by Melodia.",
+_MODEL_RESIDUE = {
+    "chain": "Chain identifier.",
     "model": "PDB MODEL number of the conformation.",
-    "code": "Structure identifier (from the input file name).",
-    **_RESIDUE,
+    "order": "Residue number from the PDB file (author numbering).",
+    "name": "Residue name.",
+    "residue_label": "Residue name and number, e.g. ALA45.",
+}
+
+_CURVATURE_TORSION = {
     "curvature": "Frenet-Serret curvature of the C-alpha spline at this residue (1/A).",
     "torsion": "Frenet-Serret torsion of the C-alpha spline at this residue (1/A).",
+}
+
+_DESCRIPTORS = {
+    **_MODEL_RESIDUE,
+    **_CURVATURE_TORSION,
     "arc_length": "C-alpha spline arc length over a 3-residue window (A).",
     "writhing": "Gauss writhing number over a 5-residue window.",
     "phi": "Backbone phi dihedral (degrees; empty for the first residue).",
@@ -103,15 +112,11 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
             "torsion_min": "Minimum torsion over models.",
             "torsion_max": "Maximum torsion over models.",
             "models": "Number of models with this residue.",
-            "curvature_dmax_min": "Lowest curvature kept after trimming sparse extreme bins.",
-            "curvature_dmax_max": "Highest curvature kept after trimming sparse extreme bins.",
-            "torsion_dmax_min": "Lowest torsion kept after trimming sparse extreme bins.",
-            "torsion_dmax_max": "Highest torsion kept after trimming sparse extreme bins.",
-            "curvature_dmax_bin_width": "Histogram bin width used to trim curvature.",
-            "torsion_dmax_bin_width": "Histogram bin width used to trim torsion.",
             "dmax": (
                 "Spread of the residue in (curvature, torsion) space: diagonal of the "
-                "trimmed curvature x torsion range. Higher means more flexible."
+                "curvature x torsion range after trimming sparse extreme histogram bins. "
+                "Higher means more flexible. The trimmed ranges are in "
+                "AnalysisResult.residue_summary_df when using FleXgeo2 from Python."
             ),
         },
     ),
@@ -172,7 +177,8 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         "HDBSCAN cluster of every model at every residue, clustered independently per "
         "residue in (curvature, torsion) space.",
         {
-            **_DESCRIPTORS,
+            **_MODEL_RESIDUE,
+            **_CURVATURE_TORSION,
             "cluster": "Cluster label at this residue; -1 means noise (no cluster).",
             "cluster_probability": "HDBSCAN membership strength (0 for noise).",
         },
@@ -183,7 +189,7 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         "Per-residue clustering summary.",
         {
             **_RESIDUE,
-            "n_conformations": "Number of models clustered.",
+            "models": "Number of models clustered.",
             "n_clusters": "Number of clusters found (noise excluded).",
             "noise_fraction": "Fraction of models labelled as noise.",
         },
@@ -215,8 +221,8 @@ FILE_GUIDE: tuple[OutputFile, ...] = (
         "Per-range clustering summary.",
         {
             **_RANGE,
-            "n_conformations": "Number of models clustered.",
-            "n_residues": "Number of residues in the range.",
+            "residues": "Number of residues in the range.",
+            "models": "Number of models clustered.",
             "n_clusters": "Number of clusters found (noise excluded).",
             "noise_fraction": "Fraction of models labelled as noise.",
         },

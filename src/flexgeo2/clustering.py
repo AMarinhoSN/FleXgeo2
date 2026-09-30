@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+# Per-residue cluster assignments keep the row keys and the clustered features; the
+# other descriptors are in geometry/descriptors.csv.
+ASSIGNMENT_COLUMNS = ["chain", "model", "order", "name", "residue_label", "curvature", "torsion"]
+
 
 class ClusteringService:
     """HDBSCAN clustering helpers for residues and residue ranges."""
@@ -61,7 +65,7 @@ class ClusteringService:
         ):
             residue_points = residue_df[["curvature", "torsion"]].copy()
             if len(residue_points) < max(2, min_cluster_size):
-                residue_result = residue_df.copy()
+                residue_result = residue_df[ASSIGNMENT_COLUMNS].copy()
                 residue_result["cluster"] = -1
                 residue_result["cluster_probability"] = 0.0
                 cluster_frames.append(residue_result)
@@ -71,7 +75,7 @@ class ClusteringService:
                         "order": order,
                         "name": name,
                         "residue_label": residue_label,
-                        "n_conformations": len(residue_df),
+                        "models": len(residue_df),
                         "n_clusters": 0,
                         "noise_fraction": 1.0,
                     }
@@ -86,7 +90,7 @@ class ClusteringService:
             labels = clusterer.fit_predict(feature_matrix)
             probabilities = getattr(clusterer, "probabilities_", None)
 
-            residue_result = residue_df.copy()
+            residue_result = residue_df[ASSIGNMENT_COLUMNS].copy()
             residue_result["cluster"] = labels
             residue_result["cluster_probability"] = (
                 probabilities if probabilities is not None else 0.0
@@ -101,7 +105,7 @@ class ClusteringService:
                     "order": order,
                     "name": name,
                     "residue_label": residue_label,
-                    "n_conformations": len(residue_df),
+                    "models": len(residue_df),
                     "n_clusters": len(non_noise_clusters),
                     "noise_fraction": noise_fraction,
                 }
@@ -184,7 +188,7 @@ class ClusteringService:
                         "range_start": start_order,
                         "range_end": end_order,
                         "range_label": range_label,
-                        "model": feature_table.index.astype(str),
+                        "model": feature_table.index,
                         "cluster": labels,
                         "cluster_probability": probabilities,
                         "pc1": projection[:, 0],
@@ -202,8 +206,8 @@ class ClusteringService:
                         "range_start": start_order,
                         "range_end": end_order,
                         "range_label": range_label,
-                        "n_conformations": len(feature_table),
-                        "n_residues": len(expected_orders),
+                        "residues": len(expected_orders),
+                        "models": len(feature_table),
                         "n_clusters": len(non_noise_clusters),
                         "noise_fraction": float((assignment_df["cluster"] == -1).mean()),
                     }
