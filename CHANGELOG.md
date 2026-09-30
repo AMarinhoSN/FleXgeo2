@@ -119,6 +119,10 @@ model numbers, so results and scripts written for it need updating: see
 - `overview.png` shows every per-residue result along the sequence, one panel each:
   curvature and torsion (mean +/- SD with model traces), `dmax`, and, when those analyses
   ran, clusters per residue and the mean distance to the reference.
+- The result tables (`AnalysisResult.raw_df`, the `summary_df` and `assignments_df`
+  of each analysis, ...) are annotated as `pandas.DataFrame` instead of `object`, so
+  editors and type checkers know their type, and each result class documents its
+  tables and the output file each one is written to.
 - A cluster label has the same colour in every plot, from an 18-colour palette that
   keeps grey for noise. Clusters 18 and above share dark grey and one "Other clusters
   (18+)" legend entry, instead of reusing the palette's colours.

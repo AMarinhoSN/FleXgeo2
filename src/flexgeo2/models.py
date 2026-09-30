@@ -2,27 +2,59 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from flexgeo2.config import AnalysisConfig, PathLike
+
+if TYPE_CHECKING:
+    # Imported for annotations only: pandas takes most of a second to import, and
+    # `import flexgeo2` (and `flexgeo2 --help`) should stay fast.
+    import pandas as pd
 
 
 @dataclass(slots=True)
 class DistanceResult:
-    long_df: object
-    summary_df: object
+    """Distance of every model to the reference in (curvature, torsion) space.
+
+    - ``long_df``: one row per model and residue, with the model's and the reference's
+      curvature and torsion and ``distance_to_reference`` (``reference/distances.csv``).
+    - ``summary_df``: one row per residue: mean, SD, min and max distance
+      (``reference/residues.csv``).
+    - ``reference_label``: the reference, e.g. ``"input model 1"``.
+    """
+
+    long_df: pd.DataFrame
+    summary_df: pd.DataFrame
     reference_label: str
 
 
 @dataclass(slots=True)
 class ResidueClusteringResult:
-    assignments_df: object
-    summary_df: object
+    """HDBSCAN clusters of each residue's (curvature, torsion) values across models.
+
+    - ``assignments_df``: one row per model and residue, with ``cluster`` (-1 is noise)
+      and ``cluster_probability`` (``clusters/assignments.csv``).
+    - ``summary_df``: one row per residue: ``n_clusters`` and ``noise_fraction``
+      (``clusters/residues.csv``).
+    """
+
+    assignments_df: pd.DataFrame
+    summary_df: pd.DataFrame
 
 
 @dataclass(slots=True)
 class ResidueRangeClusteringResult:
-    assignments_df: object
-    summary_df: object
+    """HDBSCAN clusters of models by the geometry of whole residue ranges.
+
+    - ``assignments_df``: one row per model and range, with ``cluster`` (-1 is noise),
+      ``cluster_probability`` and the PCA coordinates ``pc1`` and ``pc2``
+      (``range_clusters/assignments.csv``).
+    - ``summary_df``: one row per range: ``n_clusters`` and ``noise_fraction``
+      (``range_clusters/ranges.csv``).
+    """
+
+    assignments_df: pd.DataFrame
+    summary_df: pd.DataFrame
 
 
 @dataclass(slots=True)
@@ -52,11 +84,27 @@ class OutputArtifacts:
 
 @dataclass(slots=True)
 class AnalysisResult:
+    """Everything a FleXgeo2 run computed; ``save()`` writes it to an output folder.
+
+    - ``raw_df``: Melodia descriptors, one row per model and residue
+      (``geometry/descriptors.csv``).
+    - ``residue_summary_df``: one row per residue: curvature and torsion statistics
+      across models and ``dmax`` (``geometry/residues.csv``, which leaves out the
+      ``*_dmax_*`` columns that show how ``dmax`` was computed).
+    - ``model_summary_df``: one row per model and chain (``geometry/models_by_chain.csv``,
+      written when the input has more than one chain).
+    - ``overall_model_summary_df``: one row per model, all chains together
+      (``geometry/models.csv``).
+    - ``distance_result``, ``residue_clustering``, ``residue_range_clustering``: results
+      of the optional analyses, ``None`` when they did not run.
+    - ``config``: the configuration of the run; ``outputs``: the files written, if any.
+    """
+
     pdb_file: Path
-    raw_df: object
-    residue_summary_df: object
-    model_summary_df: object
-    overall_model_summary_df: object
+    raw_df: pd.DataFrame
+    residue_summary_df: pd.DataFrame
+    model_summary_df: pd.DataFrame
+    overall_model_summary_df: pd.DataFrame
     distance_result: DistanceResult | None = None
     residue_clustering: ResidueClusteringResult | None = None
     residue_range_clustering: ResidueRangeClusteringResult | None = None
