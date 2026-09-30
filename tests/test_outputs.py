@@ -16,7 +16,7 @@ from flexgeo2.models import (
     ResidueClusteringResult,
     ResidueRangeClusteringResult,
 )
-from flexgeo2.outputs import OutputDirectoryNotEmptyError, OutputWriter
+from flexgeo2.outputs import OutputDirectoryNotEmptyError, OutputWriter, chain_file_names
 
 
 class RecordingPlotter:
@@ -590,6 +590,7 @@ def with_chains(result: AnalysisResult, chains: str) -> AnalysisResult:
         return pd.concat([chain_a.assign(chain=chain) for chain in chains], ignore_index=True)
 
     distances, clustering = result.distance_result, result.residue_clustering
+    ranges = result.residue_range_clustering
     return replace(
         result,
         raw_df=copied(result.raw_df),
@@ -602,6 +603,11 @@ def with_chains(result: AnalysisResult, chains: str) -> AnalysisResult:
             clustering,
             assignments_df=copied(clustering.assignments_df),
             summary_df=copied(clustering.summary_df),
+        ),
+        residue_range_clustering=replace(
+            ranges,
+            assignments_df=copied(ranges.assignments_df),
+            summary_df=copied(ranges.summary_df),
         ),
     )
 
@@ -672,3 +678,42 @@ def test_overwrite_removes_per_chain_figures_of_an_earlier_run(
     )
 
     assert written_files(tmp_path) == FULL_DEFAULT_FILES
+
+
+@pytest.mark.parametrize(
+    ("chains", "names"),
+    [
+        (["A", "B"], ["A", "B"]),
+        (["a"], ["a"]),
+        (["A", "a", "B", "b", "c"], ["A", "a_lower", "B", "b_lower", "c"]),
+        (["a", "A"], ["a_lower", "A"]),
+        ([None, "", "x/y"], ["unassigned", "unassigned_2", "x_y"]),
+        (["AB", "Ab", "aB"], ["AB", "Ab_lower", "aB_lower_2"]),
+    ],
+)
+def test_chain_file_names_are_unique_ignoring_case(chains: list, names: list) -> None:
+    assert list(chain_file_names(chains).values()) == names
+
+
+def test_chain_ids_that_differ_only_by_case_get_distinct_file_names(
+    tmp_path: Path, plotters: dict, full_result: AnalysisResult
+) -> None:
+    # Large assemblies use both A and a; macOS and Windows file names ignore case.
+    make_writer(tmp_path, plotters, distance_matrices=True, plot_residues=["1"]).write(
+        with_chains(full_result, "AaBbC"), max_models_in_plot=12, hide_model_traces=False
+    )
+
+    files = written_files(tmp_path)
+    assert len({name.casefold() for name in files}) == len(files)
+    assert {
+        "overview_A.png",
+        "overview_a_lower.png",
+        "overview_C.png",
+        "reference/heatmap_b_lower.png",
+        "clusters/clusters_a_lower.png",
+        "reference/matrices/A.csv",
+        "reference/matrices/a_lower.csv",
+        "range_clusters/a_lower_1-2.png",
+        "residue_plots/A_0001_ALA.png",
+        "residue_plots/a_lower_0001_ALA.png",
+    } <= files

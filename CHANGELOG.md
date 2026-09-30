@@ -110,6 +110,10 @@ model numbers, so results and scripts written for it need updating: see
 
 ### Fixed
 
+- Chain IDs that differ only by case (`A` and `a`, used by large assemblies) wrote
+  per-chain files with the same name on macOS and Windows, so one chain's matrix or plot
+  overwrote the other's. The chain that is not upper case now gets a `_lower` suffix
+  (`reference/matrices/a_lower.csv`).
 - The distance heatmap and distance matrices ordered residues alphabetically by label
   (e.g. VAL17 before THR66); they now follow the sequence.
 - `--hide-model-traces` and `--max-models-in-plot` had no effect on the default overview

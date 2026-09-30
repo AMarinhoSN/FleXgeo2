@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 from flexgeo2.config import MAX_CHAINS_PER_FIGURE, OutputConfig
@@ -123,6 +124,7 @@ class OutputWriter:
                 directory.mkdir(parents=True, exist_ok=True)
         chains = list(result.residue_summary_df["chain"].drop_duplicates())
         per_chain = len(chains) > MAX_CHAINS_PER_FIGURE
+        names = chain_file_names(chains)
 
         artifacts = OutputArtifacts(
             raw_csv=geometry_dir / "descriptors.csv",
@@ -170,7 +172,7 @@ class OutputWriter:
             artifacts.residue_summary_csv, index=False
         )
         result.overall_model_summary_df.to_csv(artifacts.overall_model_summary_csv, index=False)
-        for figure_chains, path in self._figures(output_dir, "overview", chains, per_chain):
+        for figure_chains, path in self._figures(output_dir, "overview", names, per_chain):
             self.overview_plotter.plot(
                 _in_chains(result.residue_summary_df, figure_chains),
                 path,
@@ -198,7 +200,7 @@ class OutputWriter:
             result.distance_result.long_df.to_csv(artifacts.distance_long_csv, index=False)
             result.distance_result.summary_df.to_csv(artifacts.distance_summary_csv, index=False)
             long_df = result.distance_result.long_df
-            compared = list(long_df["chain"].drop_duplicates())
+            compared = {chain: names[chain] for chain in long_df["chain"].drop_duplicates()}
             for figure_chains, path in self._figures(reference_dir, "heatmap", compared, per_chain):
                 self.distance_plotter.plot(
                     _in_chains(long_df, figure_chains),
@@ -215,7 +217,7 @@ class OutputWriter:
                     ].copy()
                     self.write_distance_matrix_csv(
                         chain_distance_long_df,
-                        artifacts.distance_matrix_dir / f"{sanitize_chain_id(chain)}.csv",
+                        artifacts.distance_matrix_dir / f"{names[chain]}.csv",
                     )
 
         if result.residue_clustering is not None:
@@ -224,7 +226,7 @@ class OutputWriter:
             )
             result.residue_clustering.summary_df.to_csv(artifacts.cluster_summary_csv, index=False)
             clustering = result.residue_clustering
-            clustered = list(clustering.summary_df["chain"].drop_duplicates())
+            clustered = {chain: names[chain] for chain in clustering.summary_df["chain"].unique()}
             for figure_chains, path in self._figures(
                 clusters_dir, "clusters", clustered, per_chain
             ):
@@ -244,32 +246,38 @@ class OutputWriter:
                 artifacts.range_cluster_summary_csv, index=False
             )
             self._plot_range_clusters(
-                result.residue_range_clustering.assignments_df, artifacts.range_cluster_plots_dir
+                result.residue_range_clustering.assignments_df,
+                artifacts.range_cluster_plots_dir,
+                names,
             )
 
         if artifacts.residue_plots_dir is not None:
             artifacts.residue_plots_dir.mkdir(parents=True, exist_ok=True)
-            self._plot_chosen_residues(result, artifacts.residue_plots_dir)
+            self._plot_chosen_residues(result, artifacts.residue_plots_dir, names)
 
         # Last, so the guide and manifest describe the files that now exist.
         artifacts.readme, artifacts.run_manifest = write_report(result, output_dir)
         return artifacts
 
-    def _figures(self, directory: Path, stem: str, chains: list, per_chain: bool):
-        """``(chains, path)`` of each figure: all chains in one, or one file per chain."""
+    def _figures(self, directory: Path, stem: str, names: dict, per_chain: bool):
+        """``(chains, path)`` of each figure: all chains in one, or one file per chain.
+
+        ``names`` maps each chain in the figure to its file-name part.
+        """
         ext = self.config.plot_format
         if not per_chain:
-            return [(chains, directory / f"{stem}.{ext}")]
-        return [
-            ([chain], directory / f"{stem}_{sanitize_chain_id(chain)}.{ext}") for chain in chains
-        ]
+            return [(list(names), directory / f"{stem}.{ext}")]
+        return [([chain], directory / f"{stem}_{name}.{ext}") for chain, name in names.items()]
 
     @staticmethod
-    def residue_plot_name(chain, order: int, name: str, ext: str = "png") -> str:
-        """Zero-padded residue number first, so files sort in sequence order."""
-        return f"{sanitize_chain_id(chain)}_{int(order):04d}_{name}.{ext}"
+    def residue_plot_name(chain_name: str, order: int, name: str, ext: str = "png") -> str:
+        """Zero-padded residue number first, so files sort in sequence order.
 
-    def _plot_chosen_residues(self, result: AnalysisResult, plots_dir: Path) -> None:
+        ``chain_name`` is the chain's file-name part (see ``chain_file_names``).
+        """
+        return f"{chain_name}_{int(order):04d}_{name}.{ext}"
+
+    def _plot_chosen_residues(self, result: AnalysisResult, plots_dir: Path, names: dict) -> None:
         summary = result.residue_summary_df
         residues_by_chain = {
             chain: set(group["order"]) for chain, group in summary.groupby("chain", dropna=False)
@@ -298,19 +306,47 @@ class OutputWriter:
             self.residue_plotter.plot(
                 points[(points["chain"] == chain) & (points["order"] == order)],
                 plots_dir
-                / self.residue_plot_name(chain, order, residue["name"], self.config.plot_format),
+                / self.residue_plot_name(
+                    names[chain], order, residue["name"], self.config.plot_format
+                ),
                 dmax=residue["dmax"],
                 reference=reference_point,
             )
 
-    def _plot_range_clusters(self, assignments_df, plots_dir: Path) -> None:
+    def _plot_range_clusters(self, assignments_df, plots_dir: Path, names: dict) -> None:
         for (chain, range_label), range_cluster_df in assignments_df.groupby(
             ["chain", "range_label"], dropna=False
         ):
-            stem = f"{sanitize_chain_id(chain)}_{str(range_label).replace('/', '_')}"
+            stem = f"{names[chain]}_{str(range_label).replace('/', '_')}"
             self.residue_range_cluster_plotter.plot(
                 range_cluster_df, plots_dir / f"{stem}.{self.config.plot_format}"
             )
+
+
+def chain_file_names(chains) -> dict:
+    """File-name part for each chain ID, unique even on case-insensitive file systems.
+
+    IDs are used as they are ("/" replaced, blank as "unassigned") unless two differ only
+    by case, as in large assemblies with chains A and a (macOS and Windows would treat
+    overview_A.png and overview_a.png as the same file). Then the IDs that are not all
+    upper case get a "_lower" suffix: overview_A.png and overview_a_lower.png. Names that
+    still clash (identical after "/" is replaced, or multi-letter IDs) get a number.
+    """
+    names = {chain: sanitize_chain_id(chain) for chain in chains}
+    # Distinct spellings per case-folded name; more than one means a case clash.
+    spellings = Counter(name.casefold() for name in set(names.values()))
+    for chain, name in names.items():
+        if spellings[name.casefold()] > 1 and name != name.upper():
+            names[chain] = f"{name}_lower"
+    taken: set[str] = set()
+    for chain, name in names.items():
+        unique, number = name, 1
+        while unique.casefold() in taken:
+            number += 1
+            unique = f"{name}_{number}"
+        names[chain] = unique
+        taken.add(unique.casefold())
+    return names
 
 
 def _in_chains(df, chains: list):

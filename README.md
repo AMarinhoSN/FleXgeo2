@@ -242,6 +242,11 @@ Some files are written only when they apply:
   `clusters/clusters_<chain>.png`: with more than 4 chains, these figures are written
   one per chain instead of one for all chains, which would be too tall to read
 
+In file names, `<chain>` is the chain ID. When two chain IDs differ only by case (e.g.
+`A` and `a` in a large assembly), the one that is not upper case gets a `_lower` suffix
+(`overview_a_lower.png`), because macOS and Windows treat `overview_A.png` and
+`overview_a.png` as the same file.
+
 FleXgeo2 will not write into an output folder that already contains files, so results
 from different runs never mix. To rerun into the same folder, add `--overwrite`
 (`OutputConfig(overwrite=True)` in Python): the files of the earlier run are removed
